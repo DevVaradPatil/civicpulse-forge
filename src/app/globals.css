@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/* CivicPulse design tokens — flat, solid colors only. No gradients. */
+@theme {
+  /* surfaces & text */
+  --color-bg: #ffffff;
+  --color-surface: #f7f7f8;
+  --color-border: #e5e7eb;
+  --color-fg: #18181b;
+  --color-muted: #6b7280;
+
+  /* brand */
+  --color-brand: #2563eb;
+  --color-brand-hover: #1d4ed8;
+  --color-brand-fg: #ffffff;
+
+  /* severity (solid chips) */
+  --color-sev-low: #16a34a;
+  --color-sev-med: #f59e0b;
+  --color-sev-high: #ef4444;
+  --color-sev-critical: #b91c1c;
+
+  /* status (solid chips) */
+  --color-status-reported: #6b7280;
+  --color-status-verified: #2563eb;
+  --color-status-progress: #f59e0b;
+  --color-status-resolved: #16a34a;
+
+  /* category (distinct categorical palette, flat) */
+  --color-cat-pothole: #e11d48;
+  --color-cat-water: #0ea5e9;
+  --color-cat-light: #f59e0b;
+  --color-cat-waste: #16a34a;
+  --color-cat-other: #7c3aed;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Dark mode — redefine surface/text tokens; brand & semantic colors carry over. */
+.dark {
+  --color-bg: #0b0b0c;
+  --color-surface: #1a1a1d;
+  --color-border: #2a2a2e;
+  --color-fg: #fafafa;
+  --color-muted: #a1a1aa;
+  color-scheme: dark;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Map (Leaflet) container needs explicit sizing later; keep tiles flat */
+.leaflet-container {
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
