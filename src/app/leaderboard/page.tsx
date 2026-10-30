@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Trophy, Loader2, Camera, ThumbsUp, ShieldCheck, Award } from "lucide-react";
-import { tierFor } from "@/lib/badges";
+import { tierFor, TIERS } from "@/lib/badges";
 import type { LeaderUser } from "@/lib/types";
 
 const MEDAL = ["#f59e0b", "#94a3b8", "#b45309"]; // gold, silver, bronze
@@ -36,11 +36,19 @@ function Counts({ u }: { u: LeaderUser }) {
 
 export default function LeaderboardPage() {
   const [users, setUsers] = useState<LeaderUser[] | null>(null);
+  const [context, setContext] = useState<{
+    open: number;
+    total: number;
+    resolutionRate: number;
+  } | null>(null);
 
   useEffect(() => {
     fetch("/api/leaderboard")
       .then((r) => r.json())
-      .then((d) => setUsers(d.users ?? []))
+      .then((d) => {
+        setUsers(d.users ?? []);
+        setContext(d.context ?? null);
+      })
       .catch(() => setUsers([]));
   }, []);
 
@@ -68,8 +76,33 @@ export default function LeaderboardPage() {
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
       ) : users.length === 0 ? (
-        <div className="mt-10 rounded-xl border border-dashed border-border p-10 text-center text-muted">
-          No heroes yet. Report or confirm an issue to get on the board.
+        <div className="mt-10 rounded-xl border border-dashed border-border p-8 text-center">
+          <Trophy className="mx-auto h-8 w-8 text-muted" />
+          <p className="mt-3 font-medium">The board is open</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-muted">
+            {context
+              ? `No citizen has claimed a place yet. ${context.open.toLocaleString(
+                  "en-IN",
+                )} grievances across Bengaluru are still unresolved in the official records — the first report puts you top.`
+              : "No citizen has claimed a place yet. The first report puts you top."}
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {TIERS.map((t) => (
+              <span
+                key={t.name}
+                title={t.blurb}
+                className="rounded-full border border-border bg-surface px-3 py-1 text-xs"
+              >
+                {t.name} <span className="text-muted">{t.min}+</span>
+              </span>
+            ))}
+          </div>
+          <Link
+            href="/report"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-fg hover:bg-brand-hover"
+          >
+            <Camera className="h-4 w-4" /> File the first report
+          </Link>
         </div>
       ) : (
         <>

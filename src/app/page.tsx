@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Camera,
   MapPin,
@@ -19,6 +20,7 @@ import { LinkButton } from "@/components/ui/button";
 import { IssueCard } from "@/components/issue-card";
 import { getDashboard, cityCells } from "@/lib/server/stats";
 import { CityScatter } from "@/components/city-scatter";
+import { isRealWard } from "@/lib/domain";
 
 export const dynamic = "force-dynamic";
 
@@ -31,11 +33,20 @@ const AGENTS = [
 ];
 
 export default async function Home() {
-  const [{ stats, hotspots, issues, provenance }, cells] = await Promise.all([
+  const [{ stats, hotspots, issues, provenance, agencies, wards }, cells] = await Promise.all([
     getDashboard(),
     cityCells(),
   ]);
   const recent = issues.slice(0, 4);
+
+  // Real counts for the strip below the hero.
+  const wardsCovered = wards.filter((w) => isRealWard(w.ward)).length;
+  const agenciesTracked = agencies.filter((a) => a.agency).length;
+  // Named agencies with enough records for a rate to mean anything, worst first.
+  const worstAgencies = agencies
+    .filter((a) => a.agency && a.total >= 100)
+    .sort((a, b) => a.resolutionRate - b.resolutionRate)
+    .slice(0, 6);
 
   const statCards = [
     { value: stats.total.toLocaleString("en-IN"), label: "Records", icon: ListChecks, accent: "bg-brand/10 text-brand" },
@@ -75,9 +86,20 @@ export default async function Home() {
             </div>
           </div>
 
-          {/* Bengaluru, drawn from the real record coordinates */}
+          {/* Hero map. Decorative: the data-drawn view lives further down. */}
           <div className="order-first lg:order-last">
-            <CityScatter cells={cells} total={stats.total} />
+            {/* Line art on a transparent background, so it reads on both themes.
+                Height-capped: the source is a tall 2:3 and would otherwise
+                dwarf the copy beside it. */}
+            <Image
+              src="/hero-map.webp"
+              alt=""
+              aria-hidden
+              width={1024}
+              height={1536}
+              priority
+              className="mx-auto h-auto max-h-[380px] w-auto object-contain lg:max-h-[460px]"
+            />
           </div>
         </div>
 
@@ -111,6 +133,86 @@ export default async function Home() {
           </p>
         )}
       </section>
+
+      {/* Where the records actually are — drawn from their own coordinates */}
+      <section className="border-t border-border py-14">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
+          <CityScatter cells={cells} total={stats.total} />
+          <div>
+            <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
+              Every dot is real
+            </h2>
+            <p className="mt-3 text-lg">
+              Not a stock map. Each dot is a neighbourhood cell holding grievances filed by
+              Bengaluru residents, sized by volume and coloured by what people complain about
+              there.
+            </p>
+            <dl className="mt-5 space-y-2 text-sm">
+              <div className="flex justify-between border-b border-border pb-2">
+                <dt className="text-muted">Wards covered</dt>
+                <dd className="font-medium tabular-nums">{wardsCovered}</dd>
+              </div>
+              <div className="flex justify-between border-b border-border pb-2">
+                <dt className="text-muted">Agencies held to account</dt>
+                <dd className="font-medium tabular-nums">{agenciesTracked}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted">Still unresolved</dt>
+                <dd className="font-medium tabular-nums">
+                  {stats.open.toLocaleString("en-IN")}
+                </dd>
+              </div>
+            </dl>
+            <Link
+              href="/map"
+              className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline"
+            >
+              Open the live map <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Agency accountability — the part that makes this more than a report box */}
+      {worstAgencies.length > 0 && (
+        <section className="border-t border-border py-14">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
+            Who is answering, and who is not
+          </h2>
+          <p className="mt-2 max-w-2xl text-muted">
+            Resolution rates counted from the records themselves. Rejected and closed
+            grievances are left out of the denominator rather than quietly counted as either.
+          </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {worstAgencies.map((a) => (
+              <div key={a.agency ?? "unassigned"} className="rounded-xl border border-border p-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-medium">{a.agency ?? "Unassigned"}</span>
+                  <span className="text-lg font-semibold tabular-nums">
+                    {Math.round(a.resolutionRate * 100)}%
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+                  <div
+                    className="h-full bg-status-resolved"
+                    style={{ width: `${Math.round(a.resolutionRate * 100)}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-muted">
+                  {a.resolved.toLocaleString("en-IN")} resolved ·{" "}
+                  {a.open.toLocaleString("en-IN")} open
+                </p>
+              </div>
+            ))}
+          </div>
+          <Link
+            href="/dashboard"
+            className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline"
+          >
+            See the full dashboard <ArrowRight className="h-4 w-4" />
+          </Link>
+        </section>
+      )}
 
       {/* Agent pipeline */}
       <section className="border-t border-border py-14">

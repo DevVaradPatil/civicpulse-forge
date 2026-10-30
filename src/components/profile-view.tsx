@@ -5,10 +5,13 @@ import {
   ShieldCheck,
   CheckCircle2,
   Award,
+  MapPinned,
+  Layers,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { IssueCard } from "@/components/issue-card";
-import { tierFor, nextTier, badgesFor } from "@/lib/badges";
+import { tierFor, nextTier, badgesFor, coverageFrom } from "@/lib/badges";
 import type { Issue, LeaderUser } from "@/lib/types";
 
 const BADGE_ICON: Record<string, LucideIcon> = {
@@ -17,6 +20,9 @@ const BADGE_ICON: Record<string, LucideIcon> = {
   ThumbsUp,
   ShieldCheck,
   CheckCircle2,
+  MapPinned,
+  Layers,
+  Users,
 };
 
 export function ProfileView({
@@ -28,7 +34,10 @@ export function ProfileView({
 }) {
   const tier = tierFor(profile.points);
   const next = nextTier(profile.points);
-  const badges = badgesFor(profile);
+  // Coverage comes from the person's own reports, so every badge states a
+  // fact that can be checked against the issues listed below.
+  const coverage = coverageFrom(reports);
+  const badges = badgesFor(profile, coverage);
   const initial = (profile.displayName || "U").charAt(0).toUpperCase();
 
   return (
@@ -83,6 +92,15 @@ export function ProfileView({
         </div>
       </div>
 
+      {/* Reach — counted from the reports listed below, not a separate tally. */}
+      {reports.length > 0 && (
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <Stat label="Wards covered" value={coverage.wards} />
+          <Stat label="Issue types" value={coverage.categories} />
+          <Stat label="Verified fixes" value={coverage.verifiedFixes} />
+        </div>
+      )}
+
       {/* Badges */}
       {badges.length > 0 && (
         <div className="mt-6">
@@ -93,6 +111,7 @@ export function ProfileView({
               return (
                 <span
                   key={b.id}
+                  title={b.detail}
                   className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-sm"
                 >
                   <Icon className="h-4 w-4 text-brand" />
