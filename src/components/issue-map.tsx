@@ -9,7 +9,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { BENGALURU, severityMeta, CATEGORIES } from "@/lib/domain";
 import { SEVERITY_HEX, CATEGORY_HEX, UNRATED_HEX } from "@/lib/colors";
-import type { Issue } from "@/lib/types";
+import type { Issue, WardChoropleth } from "@/lib/types";
 
 export type ColorBy = "severity" | "category";
 
@@ -70,12 +70,103 @@ function ClusteredMarkers({ issues, colorBy }: { issues: Issue[]; colorBy: Color
   return null;
 }
 
+/**
+ * Shades BBMP ward boundaries by each ward's real resolution rate.
+ *
+ * The boundary file and the grievance records spell wards differently, so the
+ * join is on the source's numeric ward_id, never the name. A ward with no
+ * records, or none yet decided either way, is drawn as an outline with no fill
+ * rather than being coloured as if it scored zero.
+ */
+function WardChoroplethLayer({ stats }: { stats: Map<number, WardChoropleth> }) {
+  const map = useMap();
+
+  useEffect(() => {
+    let cancelled = false;
+    let layer: L.GeoJSON | null = null;
+
+    (async () => {
+      try {
+        const res = await fetch("/bengaluru-wards.geojson");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const gj = await res.json();
+        if (cancelled) return;
+
+        layer = L.geoJSON(gj, {
+          style: (f) => {
+            const s = stats.get(f?.properties?.wardId);
+            const rate = s?.resolutionRate ?? null;
+            return {
+              color: "#64748b",
+              weight: 1,
+              fillColor: rate == null ? "transparent" : rateColor(rate),
+              fillOpacity: rate == null ? 0 : 0.55,
+            };
+          },
+          onEachFeature: (f, lyr) => {
+            const p = f.properties ?? {};
+            const s = stats.get(p.wardId);
+            const name = esc(String(p.name ?? `Ward ${p.wardId}`));
+            const zone = p.zone ? `<p style="font-size:12px;color:#737373;margin:2px 0">${esc(String(p.zone))} zone</p>` : "";
+            lyr.bindPopup(
+              s
+                ? `<div style="min-width:170px">
+                     <p style="font-weight:600;margin:0">${name}</p>${zone}
+                     <p style="font-size:13px;margin:4px 0 0">
+                       <strong>${Math.round((s.resolutionRate ?? 0) * 100)}%</strong> resolved
+                     </p>
+                     <p style="font-size:12px;color:#737373;margin:2px 0">
+                       ${s.total} records · ${s.resolved} resolved · ${s.open} open
+                     </p>
+                   </div>`
+                : `<div style="min-width:150px">
+                     <p style="font-weight:600;margin:0">${name}</p>${zone}
+                     <p style="font-size:12px;color:#737373;margin:2px 0">No records in this ward.</p>
+                   </div>`,
+            );
+          },
+        });
+        layer.addTo(map);
+        // Keep the shading under the markers.
+        layer.bringToBack();
+      } catch (err) {
+        // A missing boundary file must not take the map down.
+        console.error("ward boundaries unavailable:", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (layer) map.removeLayer(layer);
+    };
+  }, [map, stats]);
+
+  return null;
+}
+
+/** Red (nothing fixed) → green (everything fixed). */
+function rateColor(rate: number): string {
+  const stops: [number, string][] = [
+    [0.1, "#b91c1c"],
+    [0.2, "#ef4444"],
+    [0.3, "#f59e0b"],
+    [0.45, "#eab308"],
+    [0.6, "#84cc16"],
+    [1.01, "#16a34a"],
+  ];
+  return stops.find(([t]) => rate < t)?.[1] ?? "#16a34a";
+}
+
 export default function IssueMap({
   issues,
   colorBy = "severity",
+  wardStats,
+  showWards = false,
 }: {
   issues: Issue[];
   colorBy?: ColorBy;
+  wardStats?: Map<number, WardChoropleth>;
+  showWards?: boolean;
 }) {
   return (
     <MapContainer
@@ -111,6 +202,9 @@ export default function IssueMap({
         </LayersControl.BaseLayer>
       </LayersControl>
 
+      {showWards && wardStats && wardStats.size > 0 && (
+        <WardChoroplethLayer stats={wardStats} />
+      )}
       <ClusteredMarkers issues={issues} colorBy={colorBy} />
     </MapContainer>
   );

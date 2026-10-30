@@ -136,6 +136,17 @@ export interface AgencyStat {
   resolutionRate: number; // 0-1
 }
 
+/** Ward stats keyed by the source's numeric ward_id, for shading boundaries. */
+export interface WardChoropleth {
+  wardId: number;
+  ward: string | null;
+  total: number;
+  resolved: number;
+  open: number;
+  /** Null when nothing in this ward has been decided either way. */
+  resolutionRate: number | null;
+}
+
 export interface WardStat {
   ward: string;
   total: number;

@@ -14,6 +14,7 @@ import type {
   Hotspot,
   Issue,
   IngestProvenance,
+  WardChoropleth,
   WardStat,
 } from "@/lib/types";
 
@@ -219,6 +220,31 @@ export async function agencyStats(): Promise<AgencyStat[]> {
       open: num(r.open),
       undecided: num(r.undecided),
       resolutionRate: decidable > 0 ? num(r.resolved) / decidable : 0,
+    };
+  });
+}
+
+/**
+ * Ward stats keyed by the source's numeric ward_id, to shade the BBMP ward
+ * boundaries. Keyed on the id because the boundary file and the grievance
+ * records transliterate the same ward names differently.
+ */
+export async function wardChoropleth(): Promise<WardChoropleth[]> {
+  const { data, error } = await supabaseAdmin.rpc("ward_choropleth");
+  if (error) {
+    console.error("ward_choropleth failed:", error.message);
+    return [];
+  }
+  type Row = { ward_id: number; ward: string | null; total: number; resolved: number; open: number };
+  return ((data ?? []) as Row[]).map((r) => {
+    const decidable = num(r.resolved) + num(r.open);
+    return {
+      wardId: num(r.ward_id),
+      ward: r.ward,
+      total: num(r.total),
+      resolved: num(r.resolved),
+      open: num(r.open),
+      resolutionRate: decidable > 0 ? num(r.resolved) / decidable : null,
     };
   });
 }

@@ -15,7 +15,7 @@ import {
 } from "@/lib/domain";
 import { CATEGORY_COLOR, SEVERITY_COLOR, UNRATED_HEX } from "@/lib/colors";
 import type { ColorBy } from "@/components/issue-map";
-import type { Issue } from "@/lib/types";
+import type { Issue, WardChoropleth } from "@/lib/types";
 
 const IssueMap = dynamic(() => import("@/components/issue-map"), {
   ssr: false,
@@ -42,10 +42,22 @@ export default function MapPage() {
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [total, setTotal] = useState(0);
   const [colorBy, setColorBy] = useState<ColorBy>("severity");
+  const [showWards, setShowWards] = useState(false);
+  const [wardStats, setWardStats] = useState<Map<number, WardChoropleth>>(new Map());
   const [cats, setCats] = useState<Set<IssueCategory>>(new Set());
   const [statuses, setStatuses] = useState<Set<IssueStatus>>(new Set());
 
   useEffect(() => {
+    // Ward shading is loaded once, alongside the issues.
+    fetch("/api/wards")
+      .then((r) => r.json())
+      .then((d) => {
+        const m = new Map<number, WardChoropleth>();
+        for (const w of (d.wards ?? []) as WardChoropleth[]) m.set(w.wardId, w);
+        setWardStats(m);
+      })
+      .catch(() => setWardStats(new Map()));
+
     fetch(`/api/issues?limit=${MAP_LIMIT}`)
       .then((r) => r.json())
       .then((d) => {
@@ -72,8 +84,15 @@ export default function MapPage() {
   }, [issues, cats, statuses]);
 
   const map = useMemo(
-    () => <IssueMap issues={filtered} colorBy={colorBy} />,
-    [filtered, colorBy],
+    () => (
+      <IssueMap
+        issues={filtered}
+        colorBy={colorBy}
+        wardStats={wardStats}
+        showWards={showWards}
+      />
+    ),
+    [filtered, colorBy, wardStats, showWards],
   );
 
   return (
@@ -95,6 +114,22 @@ export default function MapPage() {
 
       {/* Controls */}
       <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-border p-3">
+        <button
+          onClick={() => setShowWards((v) => !v)}
+          disabled={wardStats.size === 0}
+          className={`rounded-full px-3 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
+            showWards ? "bg-brand text-brand-fg" : "bg-surface text-muted hover:text-fg"
+          }`}
+          title={
+            wardStats.size === 0
+              ? "Ward statistics are unavailable right now"
+              : "Shade BBMP wards by their real resolution rate"
+          }
+        >
+          Ward resolution rate
+          {wardStats.size > 0 ? ` (${wardStats.size})` : ""}
+        </button>
+        <span className="mr-1 h-4 w-px bg-border" />
         <span className="text-xs font-medium text-muted">Color by</span>
         {(["severity", "category"] as ColorBy[]).map((m) => (
           <button

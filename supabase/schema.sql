@@ -318,3 +318,35 @@ as $$
   order by count(*) desc
   limit p_limit;
 $$;
+
+-- ------------------------------------------------- ward choropleth (by id)
+-- Ward statistics keyed by the source's own numeric ward_id, which is what
+-- the BBMP ward boundary file (public/bengaluru-wards.geojson) is keyed on.
+-- Joining on the id rather than the name matters: the two sources transliterate
+-- the same places differently (Hoodi/Hudi, Ulsoor/Halsoor, Arekere/Arakere), so
+-- a name join would silently drop ~22 of the 198 wards.
+--
+-- Reads ward_id out of source_payload, so no re-ingest is needed. Citizen
+-- reports have no source_payload and are therefore not in this result; they
+-- are mapped as individual pins, not as ward shading.
+create or replace function ward_choropleth()
+returns table (
+  ward_id  int,
+  ward     text,
+  total    bigint,
+  resolved bigint,
+  open     bigint
+)
+language sql
+stable
+as $$
+  select (i.source_payload ->> 'ward_id')::int                  as ward_id,
+         min(i.ward)                                            as ward,
+         count(*)                                               as total,
+         count(*) filter (where i.status = 'resolved')           as resolved,
+         count(*) filter (where i.status in ('reported','verified','in_progress','reopened')) as open
+  from issues i
+  where i.source_payload ->> 'ward_id' ~ '^[0-9]+$'
+  group by (i.source_payload ->> 'ward_id')::int
+  order by 1;
+$$;
