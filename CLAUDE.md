@@ -30,7 +30,10 @@ verifies the fix from an after-photo. A public dashboard holds agencies accounta
 - **Tailwind v4** (CSS `@theme` in `globals.css`; no `tailwind.config.js`).
 - **Supabase**: Postgres (data), Storage (private `media` bucket), Auth (**anonymous**;
   access tokens verified server-side).
-- **Gemini** (`gemini-2.5-flash`, server-side only — 2.0-flash is zeroed on the free tier).
+- **Gemini** (server-side only). `gemini-3.5-flash` is primary, with a fallback chain in
+  `src/lib/server/gemini.ts`. The free tier caps requests **per model per day** (2.5-flash allows
+  20) and one agent investigation spends several, so a single model cannot carry a demo — each
+  fallback has its own quota bucket. `gemini-2.0-flash` is gone (404), not merely zeroed.
 - **Leaflet + OpenStreetMap** + markercluster. lucide-react, react-hot-toast.
 - Real data: **OpenCity CKAN API** (see PLAN.md for the endpoint).
 
@@ -38,7 +41,8 @@ verifies the fix from an after-photo. A public dashboard holds agencies accounta
 
 - `src/app/` — `/`, `/report`, `/map`, `/dashboard`, `/leaderboard`, `/profile`, `/u/[uid]`,
   `/issue/[id]`, and `/api/*`.
-- `src/lib/agents/` — Gemini agents (triage, routing, verifier, insights).
+- `src/lib/agents/` — Gemini agents: one-shot (triage, routing, verifier, insights) plus the
+  multi-step `investigate.ts` loop and its `tools.ts` (function-calling over the real records).
 - `src/lib/server/` — supabase, issues, users, stats, insights, storage, gemini, auth.
 - `src/lib/domain.ts` — categories, statuses, severity, city config. **Single source of truth.**
 - `supabase/schema.sql` — tables + atomic RPCs (`award_points`, `confirm_issue`). Run in SQL editor.
@@ -48,6 +52,10 @@ verifies the fix from an after-photo. A public dashboard holds agencies accounta
 
 - `npm run dev` · `npm run build` (keep green) · `npm run lint`
 - `node --env-file=.env.local scripts/<script>.mjs`
+- Scripts that import app code (`@/…`, `server-only`) need the loader:
+  `node --import ./scripts/node-loader.mjs --env-file=.env.local scripts/<script>.mjs`
+- Self-checks: `scripts/test-tools.mjs` (agent tools vs. the live DB),
+  `scripts/test-agent-recovery.mjs` (the agent loop recovers from tool errors).
 
 ## Conventions
 

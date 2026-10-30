@@ -36,6 +36,39 @@ export interface Complaint {
   generatedAt: number;
 }
 
+/** One tool call made by the investigation agent, shown in the UI trace. */
+export interface ToolCallTrace {
+  step: number;
+  tool: string;
+  args: Record<string, unknown>;
+  /** False when the tool rejected the arguments — the agent then self-corrects. */
+  ok: boolean;
+  summary: string;
+  durationMs: number;
+}
+
+export interface InvestigationFinding {
+  claim: string;
+  /** The tool call this claim came from, e.g. "get_ward_stats(Bellanduru)". */
+  source: string;
+}
+
+/** Output of the multi-step investigation agent (src/lib/agents/investigate.ts). */
+export interface Investigation {
+  summary: string;
+  findings: InvestigationFinding[];
+  recommendedAgency: string | null;
+  recommendedAgencyLabel: string | null;
+  priority: string;
+  complaint: { subject: string; body: string };
+  trace: ToolCallTrace[];
+  toolCalls: number;
+  /** The model that actually answered — the chain falls back when one is out of quota. */
+  model?: string;
+  durationMs: number;
+  generatedAt: number;
+}
+
 /** An issue as stored in Supabase / returned to the client. */
 export interface Issue {
   id: string;

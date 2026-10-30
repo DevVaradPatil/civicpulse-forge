@@ -7,6 +7,7 @@ import { SeverityBadge, StatusBadge, RecordSourceBadge } from "@/components/ui/b
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { StatusTimeline } from "@/components/status-timeline";
 import { AgentPipeline } from "@/components/agent-pipeline";
+import { InvestigationPanel } from "@/components/investigation-panel";
 import { IssueActions } from "@/components/issue-actions";
 import { timeAgo } from "@/lib/format";
 
@@ -142,6 +143,8 @@ export default async function IssuePage({
           )}
         </div>
       )}
+
+      <InvestigationPanel issue={issue} />
 
       <AgentPipeline issue={issue} nearbyDuplicates={nearbyDuplicates} />
 
