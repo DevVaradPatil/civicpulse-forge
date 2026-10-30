@@ -74,6 +74,7 @@ function briefFor(issue: Issue): string {
     `Status: ${issue.status}`,
     `Coordinates: ${issue.lat}, ${issue.lng}`,
     issue.ward ? `Ward recorded on the issue: ${issue.ward}` : null,
+    issue.wardId ? `Ward id (use this for work-order search): ${issue.wardId}` : null,
     issue.agency ? `Agency recorded on the issue: ${issue.agency}` : null,
     issue.severity != null ? `AI severity: ${issue.severity}/5` : "AI severity: none recorded",
     issue.confirmations > 0 ? `Citizen confirmations: ${issue.confirmations}` : null,
@@ -88,6 +89,8 @@ ${facts}
 
 HOW TO WORK
 - Use the tools to gather evidence before concluding anything. A good investigation checks the surrounding area, the ward, the routing target, and that agency's track record.
+- Then follow the money: search_ward_work_orders shows what BBMP actually paid for in that ward. If public money was already spent on this kind of work and the problem is still open, say so plainly with the amount and the contractor — that contrast is the strongest thing this platform can show. If nothing matched the search terms, say nothing was found rather than implying the unrelated orders are connected.
+- If the issue does not state a ward id, call search_similar_grievances first and use its dominant_ward_id.
 - You have no figures other than what the tools return. Never state a number a tool did not give you.
 - If a tool returns an "error" field, read its "hint" and "did_you_mean"/"valid_categories" and retry with corrected arguments. Do not repeat the same failing call.
 - Stop calling tools once you have enough to justify a routing decision and a complaint.`;
@@ -107,6 +110,11 @@ function summarise(name: string, result: ToolResult): string {
         : `${result.ward}: ${result.total} records, ${result.resolution_rate_pct}% resolved (rank ${result.volume_rank}/${result.of_wards})`;
     case "get_agency_performance":
       return `${result.agency}: ${result.total} records, ${result.resolution_rate_pct}% resolved`;
+    case "search_ward_work_orders":
+      if (result.orders_found === 0) return `Ward ${result.ward_id}: no work orders recorded`;
+      return `Ward ${result.ward_id}: ${
+        result.matched_query ? "matching orders found" : "no term match, showing largest"
+      } · ward total ${result.ward_total_spend ?? "unknown"} across ${result.ward_total_orders} orders`;
     case "get_category_routing":
       return result.agency
         ? `${result.category} → ${result.agency} (${result.backed_by_records} records)`

@@ -15,6 +15,7 @@ import type {
   Issue,
   IngestProvenance,
   WardChoropleth,
+  WardSpend,
   WardStat,
 } from "@/lib/types";
 
@@ -247,6 +248,33 @@ export async function wardChoropleth(): Promise<WardChoropleth[]> {
       resolutionRate: decidable > 0 ? num(r.resolved) / decidable : null,
     };
   });
+}
+
+/**
+ * Recorded BBMP spend per ward, from the published work orders. Returns an
+ * empty list rather than throwing when the work-order data is not loaded, so
+ * the spend panel simply does not appear instead of breaking the page.
+ */
+export async function wardSpend(): Promise<WardSpend[]> {
+  const { data, error } = await supabaseAdmin.rpc("ward_spend");
+  if (error) {
+    console.error("ward_spend failed:", error.message);
+    return [];
+  }
+  type Row = {
+    ward_id: number;
+    ward: string | null;
+    orders: number;
+    total_amount: number | null;
+    median_amount: number | null;
+  };
+  return ((data ?? []) as Row[]).map((r) => ({
+    wardId: num(r.ward_id),
+    ward: r.ward,
+    orders: num(r.orders),
+    totalAmount: num(r.total_amount),
+    medianAmount: num(r.median_amount),
+  }));
 }
 
 /** Per-ward volume and resolution rate, highest volume first. */

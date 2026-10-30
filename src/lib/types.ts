@@ -92,6 +92,8 @@ export interface Issue {
   routing?: Complaint;
   /** Real ward name from the source dataset. */
   ward?: string | null;
+  /** Numeric BBMP ward id — the key the boundaries and work orders join on. */
+  wardId?: number | null;
   /** Real responsible agency code (e.g. "BBMP"). */
   agency?: string | null;
   /** How the coordinates were obtained: GPS, or a city-centre pin the reporter accepted. */
@@ -134,6 +136,16 @@ export interface AgencyStat {
   open: number;
   undecided: number;
   resolutionRate: number; // 0-1
+}
+
+/** Recorded BBMP spend for one ward, from the published work orders. */
+export interface WardSpend {
+  wardId: number;
+  ward: string | null;
+  orders: number;
+  /** Rupees, as published. */
+  totalAmount: number;
+  medianAmount: number;
 }
 
 /** Ward stats keyed by the source's numeric ward_id, for shading boundaries. */

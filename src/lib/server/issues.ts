@@ -15,6 +15,13 @@ const TABLE = "issues";
 
 /** Maps a snake_case Postgres row to our camelCase domain object. */
 type Row = Record<string, unknown>;
+
+/** The source record carries the numeric ward id; citizen reports do not. */
+function wardIdFrom(payload: unknown): number | null {
+  const raw = (payload as { ward_id?: unknown } | null)?.ward_id;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 function rowToIssue(d: Row): Issue {
   return {
     id: String(d.id),
@@ -36,6 +43,7 @@ function rowToIssue(d: Row): Issue {
     resolution: (d.resolution as Issue["resolution"]) ?? undefined,
     routing: (d.routing as Issue["routing"]) ?? undefined,
     ward: (d.ward as string) ?? null,
+    wardId: wardIdFrom(d.source_payload),
     agency: (d.agency as string) ?? null,
     locationSource: (d.location_source as Issue["locationSource"]) ?? null,
     source: (d.source as string) ?? null,

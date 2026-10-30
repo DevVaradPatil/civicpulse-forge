@@ -350,3 +350,118 @@ as $$
   group by (i.source_payload ->> 'ward_id')::int
   order by 1;
 $$;
+
+-- ===================================================== work orders (spend)
+-- BBMP Work Orders by Ward, 2013-2022 (OpenCity, Public Domain). One row per
+-- recorded work order. Joined to grievances on the ward number, the same key
+-- the ward boundaries use, so spend and outcome can be set against each other.
+create table if not exists work_orders (
+  id            uuid primary key default gen_random_uuid(),
+  ward_id       int  not null,
+  ward          text,
+  wo_num        text,
+  details       text not null default '',
+  contractor    text,
+  -- Rupees as published. amount is the gross; nett is after deduction.
+  amount        numeric,
+  nett          numeric,
+  deduction     numeric,
+
+  -- Present only in the richer of the dataset's two row formats.
+  budget_head   text,
+  office        text,
+  started_on    bigint,
+  ended_on      bigint,
+
+  -- How the ward was determined. Some resources are misfiled: the one named
+  -- Hebbala Num-21 holds only ward 022 rows, so a row's own Ward field wins
+  -- where it exists, and this records which source was believed.
+  ward_source   text,
+
+  source           text not null,
+  source_record_id text not null,
+  source_url       text,
+  source_payload   jsonb,
+  ingested_at      bigint
+);
+
+create index if not exists work_orders_ward_idx on work_orders (ward_id);
+create unique index if not exists work_orders_source_idx
+  on work_orders (source, source_record_id);
+
+-- Lexical retrieval over the work descriptions. This is what lets the agent
+-- ask "was anything actually built here?" and get ranked, cited rows back
+-- rather than a guess.
+create index if not exists work_orders_details_fts
+  on work_orders using gin (to_tsvector('english', details));
+
+-- Spend per ward, for the spend-vs-outcome view.
+create or replace function ward_spend()
+returns table (
+  ward_id     int,
+  ward        text,
+  orders      bigint,
+  total_amount numeric,
+  median_amount numeric
+)
+language sql
+stable
+as $$
+  select w.ward_id,
+         min(w.ward)                                                  as ward,
+         count(*)                                                     as orders,
+         coalesce(sum(w.amount), 0)                                   as total_amount,
+         percentile_cont(0.5) within group (order by w.amount)        as median_amount
+  from work_orders w
+  group by w.ward_id
+  order by coalesce(sum(w.amount), 0) desc;
+$$;
+
+-- Ranked search over one ward's work orders. Falls back to returning the
+-- largest orders when the query matches nothing, so the agent always learns
+-- something about the ward instead of getting an empty result it might read
+-- as "no work was done".
+create or replace function search_work_orders(
+  p_ward_id int,
+  p_query   text default null,
+  p_limit   int  default 5
+)
+returns table (
+  wo_num     text,
+  details    text,
+  contractor text,
+  amount     numeric,
+  rank       real,
+  matched    boolean
+)
+language sql
+stable
+as $$
+  with q as (
+    select case
+             when p_query is null or btrim(p_query) = '' then null
+             else websearch_to_tsquery('english', p_query)
+           end as tsq
+  ),
+  hits as (
+    select w.wo_num, w.details, w.contractor, w.amount,
+           ts_rank(to_tsvector('english', w.details), (select tsq from q)) as rank,
+           true as matched
+    from work_orders w
+    where w.ward_id = p_ward_id
+      and (select tsq from q) is not null
+      and to_tsvector('english', w.details) @@ (select tsq from q)
+    order by rank desc, w.amount desc nulls last
+    limit p_limit
+  )
+  select * from hits
+  union all
+  select w.wo_num, w.details, w.contractor, w.amount, 0::real, false
+  from work_orders w
+  where w.ward_id = p_ward_id
+    and not exists (select 1 from hits)
+  order by matched desc, rank desc, amount desc nulls last
+  limit p_limit;
+$$;
+
+alter table work_orders enable row level security;

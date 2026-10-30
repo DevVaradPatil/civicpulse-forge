@@ -52,6 +52,27 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
     },
   },
   {
+    name: "search_ward_work_orders",
+    description:
+      "Search what BBMP actually paid for in a ward, from the published work-order records (2013-2022). Returns matching orders with their descriptions, contractors and amounts, plus the ward's total spend. Use it to check whether money was already spent on the thing being complained about — that contrast is the point of the platform.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        ward_id: {
+          type: Type.NUMBER,
+          description:
+            "Numeric BBMP ward id, 1-198. Get it from search_similar_grievances (dominant_ward_id) if the issue does not state one.",
+        },
+        query: {
+          type: Type.STRING,
+          description:
+            "Words describing the work to look for, e.g. 'pothole asphalting road' or 'street light'. Omit to get the ward's largest orders.",
+        },
+      },
+      required: ["ward_id"],
+    },
+  },
+  {
     name: "get_ward_stats",
     description:
       "Grievance volume and resolution rate for one Bengaluru ward, from the real records. Use it to show how a ward is performing.",
@@ -142,7 +163,9 @@ async function searchSimilarGrievances(args: ToolResult): Promise<ToolResult> {
   const dLng = radiusKm / (111 * Math.cos((lat * Math.PI) / 180) || 1);
   let q = supabaseAdmin
     .from("issues")
-    .select("id, title, status, category, ward, agency, lat, lng, created_at, source_record_id, source_url")
+    .select(
+      "id, title, status, category, ward, agency, lat, lng, created_at, source_record_id, source_url, source_payload",
+    )
     .gte("lat", lat - dLat)
     .lte("lat", lat + dLat)
     .gte("lng", lng - dLng)
@@ -184,7 +207,14 @@ async function searchSimilarGrievances(args: ToolResult): Promise<ToolResult> {
   const resolved = near.filter((r) => r.status === "resolved").length;
   const open = near.filter((r) => OPEN_STATUSES.includes(r.status as never)).length;
   const wards = new Map<string, number>();
-  for (const r of near) if (r.ward) wards.set(r.ward, (wards.get(r.ward) ?? 0) + 1);
+  const wardIds = new Map<number, number>();
+  for (const r of near) {
+    if (r.ward) wards.set(r.ward, (wards.get(r.ward) ?? 0) + 1);
+    // The numeric id is what the work-order and boundary data are keyed on.
+    const id = Number((r as { source_payload?: { ward_id?: string } }).source_payload?.ward_id);
+    if (Number.isInteger(id) && id > 0) wardIds.set(id, (wardIds.get(id) ?? 0) + 1);
+  }
+  const dominantWardId = [...wardIds].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   const times = near.map((r) => Number(r.created_at)).filter(Number.isFinite);
 
   return {
@@ -195,6 +225,8 @@ async function searchSimilarGrievances(args: ToolResult): Promise<ToolResult> {
     open,
     resolution_rate_pct: rate(resolved, open),
     dominant_ward: [...wards].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
+    // Pass this to search_ward_work_orders to see what was paid for here.
+    dominant_ward_id: dominantWardId,
     earliest: times.length ? new Date(Math.min(...times)).toISOString().slice(0, 10) : null,
     latest: times.length ? new Date(Math.max(...times)).toISOString().slice(0, 10) : null,
     closest: near.slice(0, 5).map((r) => ({
@@ -205,6 +237,79 @@ async function searchSimilarGrievances(args: ToolResult): Promise<ToolResult> {
       source_record_id: r.source_record_id,
       source_url: r.source_url,
     })),
+  };
+}
+
+async function searchWardWorkOrders(args: ToolResult): Promise<ToolResult> {
+  const wardId = Number(args.ward_id);
+  if (!Number.isInteger(wardId) || wardId < 1 || wardId > 250) {
+    return {
+      error: `ward_id must be a whole number between 1 and 198, got ${JSON.stringify(args.ward_id)}.`,
+      hint: "search_similar_grievances returns dominant_ward_id for a location.",
+    };
+  }
+  const query = typeof args.query === "string" ? args.query.trim() : "";
+
+  const { data, error } = await supabaseAdmin.rpc("search_work_orders", {
+    p_ward_id: wardId,
+    p_query: query || null,
+    p_limit: 5,
+  });
+  if (error) {
+    return {
+      error: `Work-order search failed: ${error.message}`,
+      hint: "The work-order records may not be loaded. Continue without this evidence.",
+    };
+  }
+
+  type Row = {
+    wo_num: string | null;
+    details: string;
+    contractor: string | null;
+    amount: number | null;
+    rank: number;
+    matched: boolean;
+  };
+  const rows = (data ?? []) as Row[];
+
+  // Ward totals, so a single matching order can be put in proportion.
+  const { data: spend } = await supabaseAdmin
+    .from("work_orders")
+    .select("amount")
+    .eq("ward_id", wardId)
+    .limit(2000);
+  const amounts = ((spend ?? []) as { amount: number | null }[])
+    .map((r) => Number(r.amount))
+    .filter((n) => Number.isFinite(n));
+  const total = amounts.reduce((a, b) => a + b, 0);
+
+  if (rows.length === 0 && amounts.length === 0) {
+    return {
+      ward_id: wardId,
+      orders_found: 0,
+      note: "No work orders are recorded for this ward in the published dataset. That is an absence of records, not proof that no work happened.",
+    };
+  }
+
+  const rupees = (n: number) =>
+    n >= 1e7 ? `Rs ${(n / 1e7).toFixed(2)} crore` : `Rs ${(n / 1e5).toFixed(2)} lakh`;
+
+  return {
+    ward_id: wardId,
+    query: query || "(largest orders)",
+    matched_query: rows.some((r) => r.matched),
+    ward_total_orders: amounts.length,
+    ward_total_spend: total ? rupees(total) : null,
+    orders: rows.map((r) => ({
+      work_order: r.wo_num,
+      description: r.details.slice(0, 220),
+      contractor: r.contractor,
+      amount: r.amount != null ? rupees(Number(r.amount)) : null,
+      matched_the_query: r.matched,
+    })),
+    note: rows.some((r) => r.matched)
+      ? "These orders matched the search terms."
+      : "Nothing matched those terms, so the ward's largest orders are shown instead. Do not describe them as related to the complaint.",
   };
 }
 
@@ -310,6 +415,7 @@ async function getCategoryRouting(args: ToolResult): Promise<ToolResult> {
 
 const HANDLERS: Record<string, (a: ToolResult) => Promise<ToolResult>> = {
   search_similar_grievances: searchSimilarGrievances,
+  search_ward_work_orders: searchWardWorkOrders,
   get_ward_stats: getWardStats,
   get_agency_performance: getAgencyPerformance,
   get_category_routing: getCategoryRouting,
