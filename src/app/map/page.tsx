@@ -36,7 +36,7 @@ const SEV_LEGEND = [
 ];
 
 /** Markers loaded onto the map. The table holds far more; the label says so. */
-const MAP_LIMIT = 2000;
+const MAP_LIMIT = 1000;
 
 export default function MapPage() {
   const [issues, setIssues] = useState<Issue[] | null>(null);

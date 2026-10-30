@@ -22,6 +22,11 @@ create table if not exists issues (
   geohash       text,
   -- Only citizen reports have a photo; official open-data records do not.
   photo_path    text,
+  -- How lat/lng was obtained for a citizen report: 'device' (GPS) or
+  -- 'approximate' (the reporter accepted a city-centre pin because their
+  -- device would not give a fix). Null on ingested records, whose coordinates
+  -- come from the source. The UI must not show an approximate pin as exact.
+  location_source text,
   confirmations int not null default 0,
   confirmed_by  text[] not null default '{}',
   reporter_id   text,
@@ -55,6 +60,7 @@ alter table issues add column if not exists source_record_id text;
 alter table issues add column if not exists source_url       text;
 alter table issues add column if not exists source_payload   jsonb;
 alter table issues add column if not exists ingested_at       bigint;
+alter table issues add column if not exists location_source  text;
 alter table issues alter column photo_path drop not null;
 alter table issues alter column severity   drop not null;
 alter table issues alter column severity   drop default;

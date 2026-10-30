@@ -21,6 +21,9 @@ import { useAuth } from "@/components/auth-provider";
 
 type Phase = "idle" | "analyzing" | "review" | "submitting" | "done";
 
+/** Rejected in the browser so a huge file never stalls the page or the upload. */
+const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+
 export default function ReportPage() {
   const { displayName, saveDisplayName, authedFetch } = useAuth();
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -31,6 +34,8 @@ export default function ReportPage() {
   const [triage, setTriage] = useState<TriageResult | null>(null);
   const [category, setCategory] = useState<IssueCategory>("other");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationSource, setLocationSource] = useState<"device" | "approximate" | null>(null);
+  const [geoDenied, setGeoDenied] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string>("");
   const [createdId, setCreatedId] = useState<string>("");
@@ -42,26 +47,60 @@ export default function ReportPage() {
 
   async function captureLocation() {
     setLocating(true);
+    setGeoDenied(false);
     try {
       const pos = await getPosition();
       setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      setLocationSource("device");
     } catch {
-      // Fall back to Delhi centre so the demo always works indoors.
-      setCoords({ ...BENGALURU.center });
+      // No silent fallback: pinning the city centre and calling it the
+      // reporter's location would put a coordinate in the database that
+      // nothing measured. The reporter is told, and has to opt in.
+      setCoords(null);
+      setLocationSource(null);
+      setGeoDenied(true);
     } finally {
       setLocating(false);
     }
+  }
+
+  /** The reporter accepts a city-centre pin, which is stored as approximate. */
+  function useApproximateLocation() {
+    setCoords({ ...BENGALURU.center });
+    setLocationSource("approximate");
+    setGeoDenied(false);
   }
 
   async function onPick(file: File) {
     setError("");
     setTriage(null);
     setCreatedId("");
+
+    // Validate before doing any work: the picker's `accept` is a hint, not a
+    // guarantee, and a huge file would stall the browser before any upload.
+    if (!file.type.startsWith("image/")) {
+      setError(`That file is ${file.type || "not an image"}. Please choose a photo.`);
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(
+        `That photo is ${(file.size / 1024 / 1024).toFixed(1)} MB. Please choose one under ${
+          MAX_UPLOAD_BYTES / 1024 / 1024
+        } MB.`,
+      );
+      return;
+    }
+
     setPhase("analyzing");
     captureLocation();
 
     try {
-      const dataUrl = await fileToCompressedDataUrl(file);
+      let dataUrl: string;
+      try {
+        dataUrl = await fileToCompressedDataUrl(file);
+      } catch {
+        throw new Error("That image could not be read. It may be corrupted — try another photo.");
+      }
       setPreview(dataUrl);
 
       const res = await fetch("/api/triage", {
@@ -86,7 +125,11 @@ export default function ReportPage() {
   }
 
   async function submit() {
-    if (!triage || !coords) return;
+    if (!triage) return;
+    if (!coords) {
+      setError("A location is needed before this report can be submitted.");
+      return;
+    }
     setPhase("submitting");
     setError("");
     if (reporter && reporter !== displayName) await saveDisplayName(reporter);
@@ -101,6 +144,7 @@ export default function ReportPage() {
           lng: coords.lng,
           triage: { ...triage, category },
           reporterName: reporter || displayName || undefined,
+          locationSource: locationSource ?? "approximate",
         }),
       });
       const data = await res.json();
@@ -272,14 +316,58 @@ export default function ReportPage() {
             </div>
           </div>
 
-          {/* Location */}
-          <div className="flex items-center gap-2 text-sm text-muted">
-            <MapPin className="h-4 w-4 text-brand" />
-            {locating
-              ? "Getting your location…"
-              : coords
-                ? `Location captured (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`
-                : "Location unavailable"}
+          {/* Location — never silently substituted */}
+          <div className="text-sm">
+            {locating ? (
+              <span className="flex items-center gap-2 text-muted">
+                <Loader2 className="h-4 w-4 animate-spin text-brand" />
+                Getting your location…
+              </span>
+            ) : coords && locationSource === "device" ? (
+              <span className="flex items-center gap-2 text-muted">
+                <MapPin className="h-4 w-4 text-brand" />
+                Location captured ({coords.lat.toFixed(4)}, {coords.lng.toFixed(4)})
+              </span>
+            ) : coords && locationSource === "approximate" ? (
+              <div className="flex items-start gap-2 rounded-lg border border-sev-med/30 bg-sev-med/10 px-3 py-2 text-sev-med">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p>
+                    Using the Bengaluru city centre — this is <strong>not</strong> your measured
+                    location. The report will be marked as approximate.
+                  </p>
+                  <button onClick={captureLocation} className="mt-1 font-medium underline">
+                    Try my location again
+                  </button>
+                </div>
+              </div>
+            ) : geoDenied ? (
+              <div className="flex items-start gap-2 rounded-lg border border-sev-med/30 bg-sev-med/10 px-3 py-2 text-sev-med">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p>
+                    We could not get your location. A report needs one, and we will not guess it
+                    for you.
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-3">
+                    <button onClick={captureLocation} className="font-medium underline">
+                      Try again
+                    </button>
+                    <button onClick={useApproximateLocation} className="font-medium underline">
+                      Use city centre (marked approximate)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <span className="flex items-center gap-2 text-muted">
+                <MapPin className="h-4 w-4" />
+                Location not captured yet.
+                <button onClick={captureLocation} className="font-medium underline">
+                  Get location
+                </button>
+              </span>
+            )}
           </div>
 
           {/* Reporter name (optional, for leaderboard) */}
@@ -299,7 +387,11 @@ export default function ReportPage() {
           </div>
 
           <div className="flex gap-3">
-            <Button onClick={submit} disabled={phase === "submitting" || !coords}>
+            <Button
+              onClick={submit}
+              disabled={phase === "submitting" || !coords}
+              title={coords ? undefined : "A location is needed before submitting"}
+            >
               {phase === "submitting" ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -321,7 +413,7 @@ export default function ReportPage() {
           <CheckCircle2 className="mx-auto h-8 w-8 text-status-resolved" />
           <h2 className="mt-2 font-medium">Report submitted</h2>
           <p className="mt-1 text-sm text-muted">
-            Thanks for making Delhi better. The community can now verify it.
+            Thanks for making Bengaluru better. The community can now verify it.
           </p>
           <div className="mt-4 flex justify-center gap-3">
             <LinkButton href={`/issue/${createdId}`}>View issue</LinkButton>

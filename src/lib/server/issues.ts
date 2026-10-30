@@ -37,6 +37,7 @@ function rowToIssue(d: Row): Issue {
     routing: (d.routing as Issue["routing"]) ?? undefined,
     ward: (d.ward as string) ?? null,
     agency: (d.agency as string) ?? null,
+    locationSource: (d.location_source as Issue["locationSource"]) ?? null,
     source: (d.source as string) ?? null,
     sourceRecordId: (d.source_record_id as string) ?? null,
     sourceUrl: (d.source_url as string) ?? null,
@@ -68,6 +69,8 @@ export async function createIssue(input: NewIssueInput): Promise<Issue> {
       confirmed_by: [],
       reporter_id: input.reporterId ?? null,
       reporter_name: input.reporterName ?? null,
+      // Recorded so an approximate pin is never presented as a GPS fix.
+      location_source: input.locationSource ?? "device",
       ai_confidence: input.triage.confidence,
       created_at: now,
       updated_at: now,

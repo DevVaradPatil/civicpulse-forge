@@ -94,6 +94,8 @@ export interface Issue {
   ward?: string | null;
   /** Real responsible agency code (e.g. "BBMP"). */
   agency?: string | null;
+  /** How the coordinates were obtained: GPS, or a city-centre pin the reporter accepted. */
+  locationSource?: "device" | "approximate" | null;
   /** Provenance — set on every ingested record, absent on citizen reports. */
   source?: string | null;
   sourceRecordId?: string | null;
@@ -195,4 +197,5 @@ export type NewIssueInput = {
   triage: TriageResult;
   reporterId?: string;
   reporterName?: string;
+  locationSource?: "device" | "approximate";
 };

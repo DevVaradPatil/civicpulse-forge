@@ -7,9 +7,15 @@ import type { NewIssueInput } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-/** Hard ceiling on one response — the table holds tens of thousands of rows. */
-const MAX_LIMIT = 3000;
+/**
+ * Hard ceiling on one response — the table holds tens of thousands of rows.
+ * 1000 is also PostgREST's own max-rows, so asking for more would silently
+ * return fewer than the limit we reported back.
+ */
+const MAX_LIMIT = 1000;
 const DEFAULT_LIMIT = 200;
+/** ~12 MB of binary, allowing for base64's ~33% overhead. */
+const MAX_IMAGE_CHARS = 17_000_000;
 
 export async function GET(req: Request) {
   const raw = Number(new URL(req.url).searchParams.get("limit"));
@@ -40,12 +46,36 @@ export async function POST(req: Request) {
     );
   }
 
+  // Never trust the client: a coordinate off the globe would land on the map
+  // as a real pin, and an oversized payload would be rejected downstream
+  // with a far less useful error.
+  if (
+    !Number.isFinite(body.lat) ||
+    !Number.isFinite(body.lng) ||
+    Math.abs(body.lat) > 90 ||
+    Math.abs(body.lng) > 180
+  ) {
+    return NextResponse.json(
+      { error: "lat must be between -90 and 90, and lng between -180 and 180." },
+      { status: 400 },
+    );
+  }
+  if (body.imageBase64.length > MAX_IMAGE_CHARS) {
+    return NextResponse.json(
+      { error: "That photo is too large. Please use one under 12 MB." },
+      { status: 413 },
+    );
+  }
+
   const authed = await getUserFromRequest(req);
   const reporterId = authed?.uid ?? body.reporterId;
   const reporterName = body.reporterName ?? authed?.name;
 
+  // Only the two values the column is documented to hold.
+  const locationSource = body.locationSource === "approximate" ? "approximate" : "device";
+
   try {
-    const issue = await createIssue({ ...body, reporterId });
+    const issue = await createIssue({ ...body, reporterId, locationSource });
     await awardPoints(reporterId, reporterName, "report");
     return NextResponse.json({ issue }, { status: 201 });
   } catch (err) {

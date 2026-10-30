@@ -71,8 +71,12 @@ export default async function IssuePage({
         <Stat icon={<Users className="h-4 w-4" />} label="Confirmations" value={String(issue.confirmations)} />
         <Stat
           icon={<MapPin className="h-4 w-4" />}
-          label="Location"
-          value={`${issue.lat.toFixed(4)}, ${issue.lng.toFixed(4)}`}
+          label={issue.locationSource === "approximate" ? "Location (approximate)" : "Location"}
+          value={
+            issue.locationSource === "approximate"
+              ? "City centre — device location unavailable"
+              : `${issue.lat.toFixed(4)}, ${issue.lng.toFixed(4)}`
+          }
         />
         <Stat
           icon={<Building2 className="h-4 w-4" />}

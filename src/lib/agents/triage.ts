@@ -59,7 +59,7 @@ const schema = {
   ],
 };
 
-const BASE_PROMPT = `You are CivicPulse's triage agent for civic issues reported by citizens in Delhi, India.
+const BASE_PROMPT = `You are CivicPulse's triage agent for civic issues reported by citizens in Bengaluru, India.
 Analyze the attached photo of a reported public problem.
 
 Rules:

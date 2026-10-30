@@ -52,6 +52,11 @@ function ClusteredMarkers({ issues, colorBy }: { issues: Issue[]; colorBy: Color
           <p style="font-size:12px;color:#737373;margin:2px 0">${CATEGORIES[i.category].label}${
             severityMeta(i.severity) ? ` · ${severityMeta(i.severity)!.label} severity` : ""
           }${i.agency ? ` · ${esc(i.agency)}` : ""}</p>
+          ${
+            i.locationSource === "approximate"
+              ? '<p style="font-size:11px;color:#a16207;margin:2px 0">Approximate location — not a device fix</p>'
+              : ""
+          }
           <a href="/issue/${i.id}" style="font-size:13px;color:#2563eb;text-decoration:underline">View issue</a>
         </div>`,
       );

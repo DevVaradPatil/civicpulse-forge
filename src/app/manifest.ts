@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "CivicPulse",
     short_name: "CivicPulse",
     description:
-      "AI-powered hyperlocal civic platform — report, track, and resolve civic issues in Delhi.",
+      "AI-powered hyperlocal civic platform — report, track, and resolve civic issues in Bengaluru.",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",
