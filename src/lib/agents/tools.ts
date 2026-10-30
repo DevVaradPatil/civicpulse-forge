@@ -240,6 +240,26 @@ async function searchSimilarGrievances(args: ToolResult): Promise<ToolResult> {
   };
 }
 
+/**
+ * Turns "pothole road asphalting" into "pothole or road or asphalting".
+ *
+ * websearch_to_tsquery ANDs bare terms, so a three-word query demanded all
+ * three words in one work-order description and matched nothing — a ward with
+ * "Asphalting to Bad Roads" orders looked like it had none. Any-term matching
+ * with ts_rank still floats the best descriptions to the top.
+ */
+function toAnyTermsQuery(raw: string): string | null {
+  const terms = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length > 2 && !STOP_TERMS.has(t));
+  return terms.length ? [...new Set(terms)].join(" or ") : null;
+}
+
+/** Words that would match nearly every work order and drown the ranking. */
+const STOP_TERMS = new Set(["the", "and", "for", "ward", "work", "works", "various", "other"]);
+
 async function searchWardWorkOrders(args: ToolResult): Promise<ToolResult> {
   const wardId = Number(args.ward_id);
   if (!Number.isInteger(wardId) || wardId < 1 || wardId > 250) {
@@ -252,7 +272,7 @@ async function searchWardWorkOrders(args: ToolResult): Promise<ToolResult> {
 
   const { data, error } = await supabaseAdmin.rpc("search_work_orders", {
     p_ward_id: wardId,
-    p_query: query || null,
+    p_query: toAnyTermsQuery(query),
     p_limit: 5,
   });
   if (error) {
