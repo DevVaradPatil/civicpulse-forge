@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createIssue, listIssues } from "@/lib/server/issues";
+import { createIssue, listIssues, countIssues } from "@/lib/server/issues";
 import { awardPoints } from "@/lib/server/users";
 import { getUserFromRequest } from "@/lib/server/auth";
 import type { NewIssueInput } from "@/lib/types";
@@ -7,10 +7,18 @@ import type { NewIssueInput } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-export async function GET() {
+/** Hard ceiling on one response — the table holds tens of thousands of rows. */
+const MAX_LIMIT = 3000;
+const DEFAULT_LIMIT = 200;
+
+export async function GET(req: Request) {
+  const raw = Number(new URL(req.url).searchParams.get("limit"));
+  const limit = Number.isFinite(raw) && raw > 0 ? Math.min(Math.trunc(raw), MAX_LIMIT) : DEFAULT_LIMIT;
   try {
-    const issues = await listIssues();
-    return NextResponse.json({ issues });
+    // `total` is the real row count, so a caller can say "N of TOTAL" instead of
+    // presenting the page size as if it were the whole dataset.
+    const [issues, total] = await Promise.all([listIssues(limit), countIssues()]);
+    return NextResponse.json({ issues, total, limit });
   } catch (err) {
     console.error("list issues failed", err);
     return NextResponse.json({ error: "Could not load issues." }, { status: 500 });

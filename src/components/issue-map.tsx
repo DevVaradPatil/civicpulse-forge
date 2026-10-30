@@ -7,19 +7,18 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import { DELHI, severityMeta, CATEGORIES } from "@/lib/domain";
-import { SEVERITY_HEX, CATEGORY_HEX } from "@/lib/colors";
+import { BENGALURU, severityMeta, CATEGORIES } from "@/lib/domain";
+import { SEVERITY_HEX, CATEGORY_HEX, UNRATED_HEX } from "@/lib/colors";
 import type { Issue } from "@/lib/types";
 
 export type ColorBy = "severity" | "category";
 
 function colorFor(issue: Issue, mode: ColorBy): string {
   if (mode === "category") return CATEGORY_HEX[issue.category];
-  const token = severityMeta(issue.severity).token.replace("sev-", "") as
-    | "low"
-    | "med"
-    | "high"
-    | "critical";
+  const meta = severityMeta(issue.severity);
+  // Records with no AI severity rating get a neutral marker, not a fake "low".
+  if (!meta) return UNRATED_HEX;
+  const token = meta.token.replace("sev-", "") as "low" | "med" | "high" | "critical";
   return SEVERITY_HEX[token];
 }
 
@@ -50,7 +49,9 @@ function ClusteredMarkers({ issues, colorBy }: { issues: Issue[]; colorBy: Color
       m.bindPopup(
         `<div style="min-width:160px">
           <p style="font-weight:600;margin:0">${esc(i.title)}</p>
-          <p style="font-size:12px;color:#737373;margin:2px 0">${CATEGORIES[i.category].label} · ${severityMeta(i.severity).label} severity</p>
+          <p style="font-size:12px;color:#737373;margin:2px 0">${CATEGORIES[i.category].label}${
+            severityMeta(i.severity) ? ` · ${severityMeta(i.severity)!.label} severity` : ""
+          }${i.agency ? ` · ${esc(i.agency)}` : ""}</p>
           <a href="/issue/${i.id}" style="font-size:13px;color:#2563eb;text-decoration:underline">View issue</a>
         </div>`,
       );
@@ -73,8 +74,8 @@ export default function IssueMap({
 }) {
   return (
     <MapContainer
-      center={[DELHI.center.lat, DELHI.center.lng]}
-      zoom={DELHI.defaultZoom}
+      center={[BENGALURU.center.lat, BENGALURU.center.lng]}
+      zoom={BENGALURU.defaultZoom}
       scrollWheelZoom
       className="h-full w-full"
     >

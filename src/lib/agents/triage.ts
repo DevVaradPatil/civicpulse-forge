@@ -4,11 +4,23 @@ import { generate, MODEL } from "@/lib/server/gemini";
 import type { IssueCategory } from "@/lib/domain";
 import type { TriageResult } from "@/lib/types";
 
+// Kept in sync with the taxonomy in domain.ts, which is derived from the
+// source dataset's own category_title values.
 const CATEGORIES: IssueCategory[] = [
   "pothole",
-  "water_leak",
-  "streetlight",
   "waste",
+  "streetlight",
+  "water_leak",
+  "sewerage",
+  "stormwater",
+  "traffic",
+  "animals",
+  "pollution",
+  "electricity",
+  "safety",
+  "parks",
+  "transport",
+  "civic_services",
   "other",
 ];
 

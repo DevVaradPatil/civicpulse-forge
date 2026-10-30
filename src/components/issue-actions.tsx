@@ -150,8 +150,22 @@ export function IssueActions({ issue: initial }: { issue: Issue }) {
         </div>
       )}
 
+      {/* Before/after verification needs an original photo, which imported
+          official records do not have. Say so instead of offering an upload
+          that is guaranteed to fail. */}
+      {!isResolved && !issue.photoPath && (
+        <div className="rounded-lg border border-border p-4">
+          <h3 className="text-sm font-medium">Fix verification unavailable</h3>
+          <p className="mt-1 text-sm text-muted">
+            This is an imported official grievance record with no original photo, so there
+            is nothing for the AI to compare an &ldquo;after&rdquo; photo against. Photo
+            verification works on citizen reports filed through CivicPulse.
+          </p>
+        </div>
+      )}
+
       {/* Resolve with AI verification */}
-      {!isResolved && (
+      {!isResolved && issue.photoPath && (
         <div className="rounded-lg border border-border p-4">
           <h3 className="text-sm font-medium">Fixed it? Verify the resolution</h3>
           <p className="mt-1 text-sm text-muted">
@@ -193,7 +207,7 @@ export function IssueActions({ issue: initial }: { issue: Issue }) {
       )}
 
       {/* Resolved state */}
-      {issue.resolution?.verified && (
+      {issue.resolution?.verified && issue.photoPath && (
         <div className="rounded-lg border border-status-resolved/30 bg-status-resolved/10 p-4">
           <div className="flex items-center gap-2 text-status-resolved">
             <ShieldCheck className="h-5 w-5" />

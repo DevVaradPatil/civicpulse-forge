@@ -14,7 +14,7 @@ import {
   Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CATEGORIES } from "@/lib/domain";
+import { CATEGORIES, agencyLabel } from "@/lib/domain";
 import type { Complaint, Issue } from "@/lib/types";
 
 type StepStatus = "done" | "pending" | "active";
@@ -66,7 +66,8 @@ export function AgentPipeline({
   issue: Issue;
   nearbyDuplicates: number;
 }) {
-  const department = CATEGORIES[issue.category].department;
+  // Real agency from the record, or whatever the routing agent resolved.
+  const agency = issue.agency ?? issue.routing?.agency ?? null;
   const [complaint, setComplaint] = useState<Complaint | null>(issue.routing ?? null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -105,11 +106,11 @@ export function AgentPipeline({
 
       {/* 1. Triage */}
       <Step icon={<ScanSearch className="h-4 w-4" />} title="Triage agent" status="done">
-        Classified as <strong>{CATEGORIES[issue.category].label}</strong>, severity{" "}
-        {issue.severity}/5
+        Classified as <strong>{CATEGORIES[issue.category].label}</strong>
+        {issue.severity != null ? `, severity ${issue.severity}/5` : ""}
         {typeof issue.aiConfidence === "number" &&
           ` · ${Math.round(issue.aiConfidence * 100)}% confidence`}
-        .
+        {issue.source ? " · imported from an official record (not AI-triaged)" : ""}.
       </Step>
 
       {/* 2. Dedup */}
@@ -125,7 +126,7 @@ export function AgentPipeline({
         title="Routing agent"
         status={complaint ? "done" : "active"}
       >
-        Responsible authority: <strong>{department}</strong>.
+        Responsible authority: <strong>{agencyLabel(agency)}</strong>.
         {!complaint ? (
           <div className="mt-2">
             <Button variant="secondary" onClick={draft} disabled={loading} className="px-3 py-1.5 text-xs">

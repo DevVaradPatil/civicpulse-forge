@@ -31,30 +31,41 @@ export interface Complaint {
   body: string;
   priority: string;
   slaEstimate: string;
-  department: string;
+  /** Real agency code the issue is routed to, derived from the source data. */
+  agency: string | null;
   generatedAt: number;
 }
 
-/** An issue as stored in Firestore / returned to the client. */
+/** An issue as stored in Supabase / returned to the client. */
 export interface Issue {
   id: string;
   title: string;
   description: string;
   category: IssueCategory;
-  severity: number;
+  /** AI triage rating 1-5. Null on ingested official records, which have none. */
+  severity: number | null;
   hazards: string[];
   status: IssueStatus;
   lat: number;
   lng: number;
   geohash: string;
-  /** GCS object path, served via /api/media/<photoPath> */
-  photoPath: string;
+  /** Storage object path, served via /api/media/<photoPath>. Null with no photo. */
+  photoPath: string | null;
   confirmations: number;
   confirmedBy?: string[];
   reporterId?: string;
   aiConfidence?: number;
   resolution?: Resolution;
   routing?: Complaint;
+  /** Real ward name from the source dataset. */
+  ward?: string | null;
+  /** Real responsible agency code (e.g. "BBMP"). */
+  agency?: string | null;
+  /** Provenance — set on every ingested record, absent on citizen reports. */
+  source?: string | null;
+  sourceRecordId?: string | null;
+  sourceUrl?: string | null;
+  ingestedAt?: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -62,16 +73,64 @@ export interface Issue {
 export interface DashboardStats {
   total: number;
   resolved: number;
-  resolutionRate: number; // 0-1
+  /** Still outstanding (reported / verified / in progress / re-opened). */
+  open: number;
+  /** Rejected or closed — excluded from resolutionRate, not counted as either. */
+  undecided: number;
+  /** Records with no AI severity rating, i.e. every ingested official record. */
+  unrated: number;
+  officialRecords: number;
+  citizenReports: number;
+  resolutionRate: number; // 0-1, over decided records only
   byStatus: Record<IssueStatus, number>;
   byCategory: Record<IssueCategory, number>;
   bySeverity: { low: number; med: number; high: number; critical: number };
-  last7Days: number;
-  trend7: { label: string; count: number }[];
+  /** The span the data itself covers (epoch ms), not a wall-clock window. */
+  window: { start: number | null; end: number | null };
+  /** Volume per calendar month, ending at the most recent record. */
+  trend: { label: string; count: number }[];
+}
+
+export interface AgencyStat {
+  /** Null when the source never assigned an agency. */
+  agency: string | null;
+  total: number;
+  resolved: number;
+  open: number;
+  undecided: number;
+  resolutionRate: number; // 0-1
+}
+
+export interface WardStat {
+  ward: string;
+  total: number;
+  resolved: number;
+  open: number;
+  resolutionRate: number; // 0-1
+}
+
+/** Provenance of the ingested data, written by scripts/ingest-opencity.mjs. */
+export interface IngestProvenance {
+  source: string;
+  datasetUrl: string;
+  resourceId: string;
+  resourceName: string;
+  license: string;
+  attribution: string;
+  sourceLastModified: string;
+  sourceTotal: number;
+  fetched: number;
+  written: number;
+  skipped: number;
+  rowsInDb?: number;
+  ingestedAt: number;
+  durationMs: number;
 }
 
 export interface Hotspot {
   cell: string; // geohash prefix
+  /** Ward most of the cluster's records belong to — a name a reader recognises. */
+  ward?: string | null;
   lat: number;
   lng: number;
   count: number;

@@ -25,12 +25,25 @@
   --color-status-verified: #2563eb;
   --color-status-progress: #f59e0b;
   --color-status-resolved: #16a34a;
+  --color-status-reopened: #db2777;
+  --color-status-closed: #475569;
+  --color-status-rejected: #a16207;
 
   /* category (distinct categorical palette, flat) */
   --color-cat-pothole: #e11d48;
   --color-cat-water: #0ea5e9;
   --color-cat-light: #f59e0b;
   --color-cat-waste: #16a34a;
+  --color-cat-sewerage: #0f766e;
+  --color-cat-stormwater: #0284c7;
+  --color-cat-traffic: #ea580c;
+  --color-cat-animals: #a16207;
+  --color-cat-pollution: #78716c;
+  --color-cat-electricity: #ca8a04;
+  --color-cat-safety: #b91c1c;
+  --color-cat-parks: #4d7c0f;
+  --color-cat-transport: #4338ca;
+  --color-cat-services: #9333ea;
   --color-cat-other: #7c3aed;
 
   --font-sans: var(--font-geist-sans);

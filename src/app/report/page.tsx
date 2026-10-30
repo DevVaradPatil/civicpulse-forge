@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/button";
 import { SeverityBadge } from "@/components/ui/badge";
-import { CATEGORY_LIST, type IssueCategory, DELHI } from "@/lib/domain";
+import { CATEGORY_LIST, type IssueCategory, BENGALURU } from "@/lib/domain";
 import type { TriageResult } from "@/lib/types";
 import { fileToCompressedDataUrl, getPosition } from "@/lib/client/image";
 import { useAuth } from "@/components/auth-provider";
@@ -47,7 +47,7 @@ export default function ReportPage() {
       setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
     } catch {
       // Fall back to Delhi centre so the demo always works indoors.
-      setCoords({ ...DELHI.center });
+      setCoords({ ...BENGALURU.center });
     } finally {
       setLocating(false);
     }

@@ -1,12 +1,38 @@
-import { TriangleAlert, Droplets, Lightbulb, Trash2, CircleHelp } from "lucide-react";
+import {
+  TriangleAlert,
+  Droplets,
+  Lightbulb,
+  Trash2,
+  CircleHelp,
+  Waves,
+  CloudRain,
+  TrafficCone,
+  Dog,
+  Factory,
+  Zap,
+  ShieldAlert,
+  Trees,
+  Bus,
+  Building2,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { IssueCategory } from "@/lib/domain";
 
 const MAP: Record<IssueCategory, LucideIcon> = {
   pothole: TriangleAlert,
-  water_leak: Droplets,
-  streetlight: Lightbulb,
   waste: Trash2,
+  streetlight: Lightbulb,
+  water_leak: Droplets,
+  sewerage: Waves,
+  stormwater: CloudRain,
+  traffic: TrafficCone,
+  animals: Dog,
+  pollution: Factory,
+  electricity: Zap,
+  safety: ShieldAlert,
+  parks: Trees,
+  transport: Bus,
+  civic_services: Building2,
   other: CircleHelp,
 };
 

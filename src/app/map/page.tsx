@@ -13,7 +13,7 @@ import {
   type IssueCategory,
   type IssueStatus,
 } from "@/lib/domain";
-import { CATEGORY_COLOR, SEVERITY_COLOR } from "@/lib/colors";
+import { CATEGORY_COLOR, SEVERITY_COLOR, UNRATED_HEX } from "@/lib/colors";
 import type { ColorBy } from "@/components/issue-map";
 import type { Issue } from "@/lib/types";
 
@@ -31,18 +31,27 @@ const SEV_LEGEND = [
   { label: "Medium", color: SEVERITY_COLOR.med },
   { label: "High", color: SEVERITY_COLOR.high },
   { label: "Critical", color: SEVERITY_COLOR.critical },
+  // Imported official records carry no AI severity rating.
+  { label: "Unrated", color: UNRATED_HEX },
 ];
+
+/** Markers loaded onto the map. The table holds far more; the label says so. */
+const MAP_LIMIT = 2000;
 
 export default function MapPage() {
   const [issues, setIssues] = useState<Issue[] | null>(null);
+  const [total, setTotal] = useState(0);
   const [colorBy, setColorBy] = useState<ColorBy>("severity");
   const [cats, setCats] = useState<Set<IssueCategory>>(new Set());
   const [statuses, setStatuses] = useState<Set<IssueStatus>>(new Set());
 
   useEffect(() => {
-    fetch("/api/issues")
+    fetch(`/api/issues?limit=${MAP_LIMIT}`)
       .then((r) => r.json())
-      .then((d) => setIssues(d.issues ?? []))
+      .then((d) => {
+        setIssues(d.issues ?? []);
+        setTotal(Number(d.total) || (d.issues?.length ?? 0));
+      })
       .catch(() => setIssues([]));
   }, []);
 
@@ -75,7 +84,10 @@ export default function MapPage() {
           <p className="text-sm text-muted">
             {issues === null
               ? "Loading…"
-              : `${filtered.length} of ${issues.length} issues across Delhi`}
+              : `${filtered.length.toLocaleString("en-IN")} shown` +
+                (issues.length < total
+                  ? ` · newest ${issues.length.toLocaleString("en-IN")} of ${total.toLocaleString("en-IN")} records in Bengaluru`
+                  : ` of ${total.toLocaleString("en-IN")} records in Bengaluru`)}
           </p>
         </div>
         <LinkButton href="/report">Report</LinkButton>

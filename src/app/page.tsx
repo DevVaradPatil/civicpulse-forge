@@ -1,6 +1,5 @@
 import { Fragment } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import {
   Camera,
   MapPin,
@@ -13,11 +12,13 @@ import {
   ListChecks,
   CheckCircle2,
   Flame,
-  TrendingUp,
+  RotateCcw,
+  Database,
 } from "lucide-react";
 import { LinkButton } from "@/components/ui/button";
 import { IssueCard } from "@/components/issue-card";
-import { getDashboard } from "@/lib/server/stats";
+import { getDashboard, cityCells } from "@/lib/server/stats";
+import { CityScatter } from "@/components/city-scatter";
 
 export const dynamic = "force-dynamic";
 
@@ -30,14 +31,17 @@ const AGENTS = [
 ];
 
 export default async function Home() {
-  const { stats, hotspots, issues } = await getDashboard();
+  const [{ stats, hotspots, issues, provenance }, cells] = await Promise.all([
+    getDashboard(),
+    cityCells(),
+  ]);
   const recent = issues.slice(0, 4);
 
   const statCards = [
-    { value: String(stats.total), label: "Reports", icon: ListChecks, accent: "bg-brand/10 text-brand" },
+    { value: stats.total.toLocaleString("en-IN"), label: "Records", icon: ListChecks, accent: "bg-brand/10 text-brand" },
     { value: `${Math.round(stats.resolutionRate * 100)}%`, label: "Resolved", icon: CheckCircle2, accent: "bg-status-resolved/10 text-status-resolved" },
     { value: String(hotspots.length), label: "Hotspots", icon: Flame, accent: "bg-sev-high/10 text-sev-high" },
-    { value: String(stats.last7Days), label: "This week", icon: TrendingUp, accent: "bg-cat-other/10 text-cat-other" },
+    { value: (stats.byStatus.reopened ?? 0).toLocaleString("en-IN"), label: "Re-opened", icon: RotateCcw, accent: "bg-status-reopened/10 text-status-reopened" },
   ];
 
   return (
@@ -48,10 +52,10 @@ export default async function Home() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-muted">
               <MapPin className="h-3.5 w-3.5 text-brand" />
-              AI-powered civic platform · Delhi
+              AI-powered civic platform · Bengaluru
             </div>
             <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-              Delhi&rsquo;s civic issues, reported by citizens and{" "}
+              Bengaluru&rsquo;s civic issues, reported by citizens and{" "}
               <span className="text-brand">resolved with AI</span>.
             </h1>
             <p className="mt-4 max-w-xl text-lg text-muted">
@@ -71,16 +75,9 @@ export default async function Home() {
             </div>
           </div>
 
-          {/* Delhi issue map */}
+          {/* Bengaluru, drawn from the real record coordinates */}
           <div className="order-first lg:order-last">
-            <Image
-              src="/delhi_vector_map.png"
-              alt="Map of reported civic issues across Delhi"
-              width={1536}
-              height={1024}
-              priority
-              className="h-auto w-full"
-            />
+            <CityScatter cells={cells} total={stats.total} />
           </div>
         </div>
 
@@ -96,6 +93,23 @@ export default async function Home() {
             </div>
           ))}
         </div>
+
+        {/* Where those numbers come from. */}
+        {provenance && (
+          <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+            <Database className="h-3.5 w-3.5 shrink-0" />
+            Every figure above is counted from{" "}
+            <a
+              href={provenance.datasetUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-fg underline"
+            >
+              {provenance.resourceName}
+            </a>{" "}
+            · {provenance.attribution} · {provenance.license}
+          </p>
+        )}
       </section>
 
       {/* Agent pipeline */}
@@ -131,7 +145,7 @@ export default async function Home() {
         <section className="border-t border-border py-14">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
-              Live from Delhi
+              Latest records
             </h2>
             <Link href="/map" className="flex items-center gap-1 text-sm text-brand hover:underline">
               View all <ArrowRight className="h-4 w-4" />

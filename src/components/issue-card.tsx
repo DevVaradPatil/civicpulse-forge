@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SeverityBadge, StatusBadge } from "@/components/ui/badge";
+import { SeverityBadge, StatusBadge, RecordSourceBadge } from "@/components/ui/badge";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { CATEGORIES } from "@/lib/domain";
 import { timeAgo } from "@/lib/format";
@@ -11,12 +11,19 @@ export function IssueCard({ issue }: { issue: Issue }) {
       href={`/issue/${issue.id}`}
       className="flex min-w-0 gap-3 rounded-lg border border-border p-3 hover:bg-surface"
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/api/media/${issue.photoPath}`}
-        alt=""
-        className="h-16 w-16 shrink-0 rounded-md border border-border object-cover"
-      />
+      {/* Official open-data records have no photo; show the category instead. */}
+      {issue.photoPath ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/api/media/${issue.photoPath}`}
+          alt=""
+          className="h-16 w-16 shrink-0 rounded-md border border-border object-cover"
+        />
+      ) : (
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-border bg-surface">
+          <CategoryIcon category={issue.category} className="h-6 w-6 text-muted" />
+        </div>
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
           <CategoryIcon category={issue.category} className="h-3.5 w-3.5 shrink-0" />
@@ -28,6 +35,7 @@ export function IssueCard({ issue }: { issue: Issue }) {
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <SeverityBadge severity={issue.severity} />
           <StatusBadge status={issue.status} />
+          <RecordSourceBadge source={issue.source} />
         </div>
       </div>
     </Link>

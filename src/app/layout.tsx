@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 const DESCRIPTION =
-  "CivicPulse is an AI-powered hyperlocal civic platform for Delhi. Report potholes, water leaks, broken streetlights and waste with a photo — a multi-agent AI pipeline triages it, routes it to the right authority, the community verifies it, and AI confirms the fix.";
+  "CivicPulse is an AI-powered civic grievance platform for Bengaluru, grounded in real open grievance data. Report a road, water, streetlight or waste issue with a photo — a multi-agent AI pipeline triages it, routes it to the responsible agency, the community verifies it, and AI confirms the fix.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -33,7 +33,8 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   keywords: [
     "civic issues",
-    "Delhi",
+    "Bengaluru",
+    "BBMP",
     "pothole reporting",
     "civic tech",
     "AI",
@@ -53,20 +54,11 @@ export const metadata: Metadata = {
     siteName: "CivicPulse",
     title: "CivicPulse — Report, track & resolve civic issues with AI",
     description: DESCRIPTION,
-    images: [
-      {
-        url: "/delhi_vector_map.png",
-        width: 1536,
-        height: 1024,
-        alt: "Map of reported civic issues across Delhi",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "CivicPulse — Report, track & resolve civic issues with AI",
     description: DESCRIPTION,
-    images: ["/delhi_vector_map.png"],
   },
 };
 

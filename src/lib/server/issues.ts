@@ -5,7 +5,8 @@ import type { Complaint, Issue, NewIssueInput } from "@/lib/types";
 import { uploadImage, decodeImage, downloadFile } from "@/lib/server/storage";
 import { verifyResolution, type VerificationResult } from "@/lib/agents/verifier";
 import { draftComplaint } from "@/lib/agents/routing";
-import { CATEGORIES, CONFIRMATIONS_TO_VERIFY, type IssueCategory } from "@/lib/domain";
+import { resolveAgency } from "@/lib/server/agencies";
+import { CONFIRMATIONS_TO_VERIFY, type IssueCategory } from "@/lib/domain";
 
 /** Dedup agent (deterministic): count same-category issues within ~250m. */
 const DUP_RADIUS_KM = 0.25;
@@ -20,19 +21,26 @@ function rowToIssue(d: Row): Issue {
     title: (d.title as string) ?? "",
     description: (d.description as string) ?? "",
     category: d.category as Issue["category"],
-    severity: (d.severity as number) ?? 1,
+    // Null stays null: ingested official records have no severity to show.
+    severity: d.severity == null ? null : Number(d.severity),
     hazards: (d.hazards as string[]) ?? [],
     status: ((d.status as Issue["status"]) ?? "reported"),
     lat: d.lat as number,
     lng: d.lng as number,
     geohash: (d.geohash as string) ?? "",
-    photoPath: (d.photo_path as string) ?? "",
+    photoPath: (d.photo_path as string) ?? null,
     confirmations: (d.confirmations as number) ?? 0,
     confirmedBy: (d.confirmed_by as string[]) ?? [],
     reporterId: (d.reporter_id as string) ?? undefined,
     aiConfidence: (d.ai_confidence as number) ?? undefined,
     resolution: (d.resolution as Issue["resolution"]) ?? undefined,
     routing: (d.routing as Issue["routing"]) ?? undefined,
+    ward: (d.ward as string) ?? null,
+    agency: (d.agency as string) ?? null,
+    source: (d.source as string) ?? null,
+    sourceRecordId: (d.source_record_id as string) ?? null,
+    sourceUrl: (d.source_url as string) ?? null,
+    ingestedAt: d.ingested_at == null ? null : Number(d.ingested_at),
     createdAt: Number(d.created_at),
     updatedAt: Number(d.updated_at),
   };
@@ -69,6 +77,15 @@ export async function createIssue(input: NewIssueInput): Promise<Issue> {
 
   if (error || !data) throw new Error(error?.message ?? "insert failed");
   return rowToIssue(data);
+}
+
+/** Total rows, for honest "showing N of TOTAL" labels. */
+export async function countIssues(): Promise<number> {
+  const { count, error } = await supabaseAdmin
+    .from(TABLE)
+    .select("*", { count: "exact", head: true });
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }
 
 export async function listIssues(limit = 200): Promise<Issue[]> {
@@ -127,10 +144,11 @@ export async function getOrDraftComplaint(
   if (!issue) return null;
   if (issue.routing && !force) return issue.routing;
 
+  const { agency } = await resolveAgency(issue);
   const drafted = await draftComplaint(issue);
   const complaint: Complaint = {
     ...drafted,
-    department: CATEGORIES[issue.category].department,
+    agency,
     generatedAt: Date.now(),
   };
   await supabaseAdmin
@@ -176,6 +194,11 @@ export async function resolveIssue(
   const issue = await getIssue(id);
   if (!issue) return null;
 
+  // Before/after verification needs a "before" photo, which official open-data
+  // records do not have.
+  if (!issue.photoPath) {
+    throw new Error("This record has no original photo, so a fix cannot be visually verified.");
+  }
   const before = await downloadFile(issue.photoPath);
   if (!before) throw new Error("original photo not found");
   const beforeMime = issue.photoPath.endsWith(".png") ? "image/png" : "image/jpeg";

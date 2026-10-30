@@ -1,4 +1,5 @@
--- CivicPulse — Supabase schema. Run this once in the Supabase SQL Editor.
+-- CivicPulse — Supabase schema. Run this in the Supabase SQL Editor.
+-- Re-runnable: the upgrade block near the bottom brings an older database up to date.
 -- Only the server (service-role key) touches these tables, so RLS is enabled
 -- with no policies: the anon key can read/write nothing directly.
 
@@ -10,13 +11,17 @@ create table if not exists issues (
   title         text not null,
   description   text default '',
   category      text not null,
-  severity      int  not null default 1,
+  -- Severity is produced by the AI triage agent on citizen photo reports only.
+  -- Ingested official records carry no severity in the source, so it stays NULL
+  -- rather than being invented.
+  severity      int,
   hazards       text[] not null default '{}',
   status        text not null default 'reported',
   lat           double precision not null,
   lng           double precision not null,
   geohash       text,
-  photo_path    text not null,
+  -- Only citizen reports have a photo; official open-data records do not.
+  photo_path    text,
   confirmations int not null default 0,
   confirmed_by  text[] not null default '{}',
   reporter_id   text,
@@ -26,12 +31,44 @@ create table if not exists issues (
   routing       jsonb,
   seed          boolean not null default false,
   created_at    bigint not null,
-  updated_at    bigint not null
+  updated_at    bigint not null,
+
+  -- ---- real-world routing (from the source dataset, never invented) ----
+  ward          text,
+  agency        text,
+
+  -- ---- provenance: every ingested row is traceable to its source record ----
+  source           text,   -- e.g. 'opencity'
+  source_record_id text,   -- the record's id within that source
+  source_url       text,   -- a URL that returns exactly this record
+  source_payload   jsonb,  -- the untouched source record
+  ingested_at      bigint
 );
+
+-- ------------------------------------------------------- upgrade (idempotent)
+-- Brings a database created by an earlier version of this file up to date.
+-- No-ops on a fresh database, where the table above already has everything.
+alter table issues add column if not exists ward             text;
+alter table issues add column if not exists agency           text;
+alter table issues add column if not exists source           text;
+alter table issues add column if not exists source_record_id text;
+alter table issues add column if not exists source_url       text;
+alter table issues add column if not exists source_payload   jsonb;
+alter table issues add column if not exists ingested_at       bigint;
+alter table issues alter column photo_path drop not null;
+alter table issues alter column severity   drop not null;
+alter table issues alter column severity   drop default;
 
 create index if not exists issues_created_at_idx on issues (created_at desc);
 create index if not exists issues_category_idx   on issues (category);
 create index if not exists issues_reporter_idx   on issues (reporter_id);
+create index if not exists issues_ward_idx       on issues (ward);
+create index if not exists issues_agency_idx     on issues (agency);
+create index if not exists issues_status_idx     on issues (status);
+
+-- Makes ingestion idempotent: re-running the importer upserts instead of duplicating.
+create unique index if not exists issues_source_record_idx
+  on issues (source, source_record_id);
 
 -- ---------------------------------------------------------------- users
 create table if not exists users (
@@ -120,4 +157,158 @@ begin
 
   return jsonb_build_object('issue', to_jsonb(r), 'counted', true);
 end;
+$$;
+
+-- ---------------------------------------- derived category → agency routing
+-- Which agencies actually handle which category, counted from the ingested
+-- records. The routing agent reads this instead of a hardcoded department
+-- list, so every routing target is backed by real grievances.
+create or replace function category_agency_counts()
+returns table (category text, agency text, n bigint)
+language sql
+stable
+as $$
+  select i.category, i.agency, count(*) as n
+  from issues i
+  where i.agency is not null
+  group by i.category, i.agency
+  order by i.category, count(*) desc;
+$$;
+
+-- Ward-level volume and resolution rate, straight from the real rows.
+create or replace function ward_stats()
+returns table (ward text, total bigint, resolved bigint, open bigint)
+language sql
+stable
+as $$
+  select i.ward,
+         count(*)                                              as total,
+         count(*) filter (where i.status = 'resolved')          as resolved,
+         count(*) filter (where i.status in ('reported','reopened','in_progress','verified')) as open
+  from issues i
+  where i.ward is not null
+  group by i.ward
+  order by count(*) desc;
+$$;
+
+-- ===================================================== dashboard aggregates
+-- These run in Postgres over EVERY row. The dashboard must never aggregate a
+-- page of rows fetched into the app: with 16k+ records that would silently
+-- report numbers computed from a 200-row window.
+
+-- Headline counts. `undecided` (rejected + closed) is reported separately so a
+-- resolution rate can exclude it instead of quietly counting it either way.
+create or replace function dashboard_stats()
+returns json
+language sql
+stable
+as $$
+  select json_build_object(
+    'total',     count(*),
+    'resolved',  count(*) filter (where status = 'resolved'),
+    'open',      count(*) filter (where status in ('reported','verified','in_progress','reopened')),
+    'undecided', count(*) filter (where status in ('rejected','closed')),
+    -- Records with no AI severity rating (every ingested official record).
+    'unrated',   count(*) filter (where severity is null),
+    'officialRecords', count(*) filter (where source is not null),
+    'citizenReports',  count(*) filter (where source is null),
+    'byStatus', coalesce((
+      select json_object_agg(s.status, s.n)
+      from (select status, count(*) n from issues group by status) s
+    ), '{}'::json),
+    'byCategory', coalesce((
+      select json_object_agg(c.category, c.n)
+      from (select category, count(*) n from issues group by category) c
+    ), '{}'::json),
+    -- Buckets match severityMeta() in src/lib/domain.ts.
+    'bySeverity', json_build_object(
+      'low',      count(*) filter (where severity >= 1 and severity < 3),
+      'med',      count(*) filter (where severity >= 3 and severity < 4),
+      'high',     count(*) filter (where severity >= 4 and severity < 5),
+      'critical', count(*) filter (where severity >= 5)
+    ),
+    'windowStart', min(created_at),
+    'windowEnd',   max(created_at)
+  )
+  from issues;
+$$;
+
+-- Per-agency accountability. A NULL agency row means the source never assigned
+-- one; it is surfaced as "Unassigned" rather than dropped.
+create or replace function agency_stats()
+returns table (agency text, total bigint, resolved bigint, open bigint, undecided bigint)
+language sql
+stable
+as $$
+  select i.agency,
+         count(*)                                        as total,
+         count(*) filter (where i.status = 'resolved')    as resolved,
+         count(*) filter (where i.status in ('reported','verified','in_progress','reopened')) as open,
+         count(*) filter (where i.status in ('rejected','closed')) as undecided
+  from issues i
+  group by i.agency
+  order by count(*) desc;
+$$;
+
+-- Volume per calendar month, ending at the most recent record in the data
+-- rather than at today's date — so the chart reflects the data it has instead
+-- of showing an empty "this week". Months are bucketed in Asia/Kolkata, the
+-- grievances' own local time.
+create or replace function monthly_trend(p_months int default 12)
+returns table (label text, n bigint)
+language sql
+stable
+as $$
+  with bounds as (
+    select date_trunc(
+             'month',
+             to_timestamp(max(created_at) / 1000.0) at time zone 'Asia/Kolkata'
+           ) as last_month
+    from issues
+  ),
+  months as (
+    select generate_series(
+             (select last_month from bounds) - ((greatest(p_months, 1) - 1) || ' months')::interval,
+             (select last_month from bounds),
+             '1 month'::interval
+           ) as m
+  )
+  select to_char(mo.m, 'Mon YYYY') as label,
+         count(i.id)               as n
+  from months mo
+  left join issues i
+    on date_trunc('month', to_timestamp(i.created_at / 1000.0) at time zone 'Asia/Kolkata') = mo.m
+  group by mo.m
+  order by mo.m;
+$$;
+
+-- Recurring-issue clusters by geohash prefix (precision 6 ~ 1.2km cells).
+create or replace function hotspot_cells(
+  p_precision int default 6,
+  p_min       int default 2,
+  p_limit     int default 5
+)
+returns table (
+  cell         text,
+  lat          double precision,
+  lng          double precision,
+  n            bigint,
+  open_count   bigint,
+  top_category text
+)
+language sql
+stable
+as $$
+  select substr(i.geohash, 1, p_precision)        as cell,
+         avg(i.lat)                               as lat,
+         avg(i.lng)                               as lng,
+         count(*)                                 as n,
+         count(*) filter (where i.status in ('reported','verified','in_progress','reopened')) as open_count,
+         mode() within group (order by i.category) as top_category
+  from issues i
+  where i.geohash is not null and length(i.geohash) >= p_precision
+  group by substr(i.geohash, 1, p_precision)
+  having count(*) >= p_min
+  order by count(*) desc
+  limit p_limit;
 $$;

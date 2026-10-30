@@ -33,25 +33,50 @@ export async function generateInsights(
   const hotspotLines = hotspots
     .map(
       (h) =>
-        `- cell ${h.cell} (~${h.lat.toFixed(3)}, ${h.lng.toFixed(3)}): ${h.count} issues, ${h.openCount} open, mostly ${CATEGORIES[h.topCategory].label}`,
+        `- ${h.ward ? `${h.ward} ward` : "an unnamed area"} (~${h.lat.toFixed(3)}, ${h.lng.toFixed(
+          3,
+        )}): ${h.count} records, ${h.openCount} open, mostly ${CATEGORIES[h.topCategory].label}`,
     )
     .join("\n");
 
-  const prompt = `You are CivicPulse's insights analyst for civic issues in Delhi, India.
+  const window =
+    stats.window.start && stats.window.end
+      ? `${new Date(stats.window.start).toISOString().slice(0, 10)} to ${new Date(
+          stats.window.end,
+        )
+          .toISOString()
+          .slice(0, 10)}`
+      : "unknown";
+
+  const prompt = `You are CivicPulse's insights analyst for civic grievances in Bengaluru, India.
 Given the aggregated data below, write:
-1) a concise 2-3 sentence "summary" of the current situation, and
-2) 3-5 short "predictions": specific predictive or actionable insights. Where relevant, factor in Delhi context (monsoon waterlogging, traffic, winter, festival waste). Reference hotspot areas and categories. Keep each prediction under 25 words.
+1) a concise 2-3 sentence "summary" of the situation these records describe, and
+2) 3-5 short "predictions": specific predictive or actionable insights. Where relevant, factor in Bengaluru context (monsoon waterlogging, lake froth/encroachment, traffic density, solid-waste collection). Reference hotspot areas and categories. Keep each prediction under 25 words.
+
+GROUNDING RULES — these matter more than style:
+- Use ONLY the numbers given below. Never state a figure that is not here, and never round a count into a different number.
+- The records span ${window}. Do not describe them as current, live or "this week", and do not imply a trend beyond that span.
+- "unrated" records have no AI severity score. Do not infer severity for them.
+- Rejected and closed records are excluded from the resolution rate; do not recompute it.
+- If the data does not support a prediction, give fewer predictions rather than inventing one.
+- Refer to places by the ward names given under HOTSPOTS. Never print a geohash cell id or raw coordinates.
 
 DATA (JSON):
 ${JSON.stringify(
   {
+    recordWindow: window,
     total: stats.total,
+    officialRecords: stats.officialRecords,
+    citizenReports: stats.citizenReports,
     resolved: stats.resolved,
+    open: stats.open,
+    rejectedOrClosed: stats.undecided,
     resolutionRatePct: Math.round(stats.resolutionRate * 100),
+    unratedForSeverity: stats.unrated,
     byStatus: stats.byStatus,
     byCategory: stats.byCategory,
     bySeverity: stats.bySeverity,
-    last7Days: stats.last7Days,
+    monthlyVolume: stats.trend,
   },
   null,
   0,

@@ -28,10 +28,17 @@ function writeCache(data: Insights) {
   }
 }
 
+/** The API can answer with an error payload or a partial object; only trust a real one. */
+function isInsights(v: unknown): v is Insights {
+  const o = v as Insights | undefined;
+  return Boolean(o && typeof o.summary === "string" && Array.isArray(o.predictions));
+}
+
 export function InsightsWidget() {
   const [open, setOpen] = useState(true); // auto-show on load
   const [insights, setInsights] = useState<Insights | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function load(force = false) {
     if (!force) {
@@ -42,10 +49,20 @@ export function InsightsWidget() {
       }
     }
     setLoading(true);
+    setError(null);
     try {
-      const data = (await (await fetch(`/api/insights${force ? "?refresh=1" : ""}`)).json()) as Insights;
+      const res = await fetch(`/api/insights${force ? "?refresh=1" : ""}`);
+      const data: unknown = await res.json().catch(() => null);
+      if (!res.ok || !isInsights(data)) {
+        const msg =
+          (data as { error?: string } | null)?.error ?? "Insights are unavailable right now.";
+        setError(msg);
+        return;
+      }
       setInsights(data);
       writeCache(data);
+    } catch {
+      setError("Could not reach the insights service.");
     } finally {
       setLoading(false);
     }
@@ -84,12 +101,28 @@ export function InsightsWidget() {
             </div>
           </header>
           <div className="overflow-y-auto p-4 text-sm">
-            {!insights ? (
+            {error && !insights ? (
+              <div className="space-y-2">
+                <p className="text-muted">{error}</p>
+                <button
+                  onClick={() => load(true)}
+                  disabled={loading}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-surface"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : !insights ? (
               <div className="flex items-center gap-2 text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" /> Generating insights…
               </div>
             ) : (
               <>
+                {error && (
+                  <p className="mb-2 text-xs text-sev-med">
+                    Could not refresh — showing the last result.
+                  </p>
+                )}
                 <p>{insights.summary}</p>
                 {insights.predictions.length > 0 && (
                   <ul className="mt-3 space-y-2">
@@ -101,7 +134,7 @@ export function InsightsWidget() {
                     ))}
                   </ul>
                 )}
-                {insights.generatedAt > 0 && (
+                {typeof insights.generatedAt === "number" && insights.generatedAt > 0 && (
                   <p className="mt-3 text-xs text-muted">Updated {timeAgo(insights.generatedAt)}</p>
                 )}
               </>
