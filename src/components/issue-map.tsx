@@ -100,7 +100,8 @@ function WardChoroplethLayer({ stats }: { stats: Map<number, WardChoropleth> }) 
               color: "#64748b",
               weight: 1,
               fillColor: rate == null ? "transparent" : rateColor(rate),
-              fillOpacity: rate == null ? 0 : 0.55,
+              // Light enough to read streets and markers through.
+              fillOpacity: rate == null ? 0 : 0.42,
             };
           },
           onEachFeature: (f, lyr) => {

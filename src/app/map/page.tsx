@@ -35,6 +35,16 @@ const SEV_LEGEND = [
   { label: "Unrated", color: UNRATED_HEX },
 ];
 
+/** Mirrors rateColor() in issue-map.tsx — keep the two in step. */
+const WARD_SCALE = [
+  { color: "#b91c1c", label: "under 10%" },
+  { color: "#ef4444", label: "10-20%" },
+  { color: "#f59e0b", label: "20-30%" },
+  { color: "#eab308", label: "30-45%" },
+  { color: "#84cc16", label: "45-60%" },
+  { color: "#16a34a", label: "60% and over" },
+];
+
 /** Markers loaded onto the map. The table holds far more; the label says so. */
 const MAP_LIMIT = 1000;
 
@@ -127,7 +137,6 @@ export default function MapPage() {
           }
         >
           Ward resolution rate
-          {wardStats.size > 0 ? ` (${wardStats.size})` : ""}
         </button>
         <span className="mr-1 h-4 w-px bg-border" />
         <span className="text-xs font-medium text-muted">Color by</span>
@@ -178,6 +187,26 @@ export default function MapPage() {
           {map}
           {/* Legend */}
           <div className="absolute bottom-3 left-3 z-[1000] rounded-lg border border-border bg-bg/90 p-2.5 text-xs backdrop-blur">
+            {showWards && (
+              <div className="mb-2 border-b border-border pb-2">
+                <div className="mb-1 font-medium">Ward resolved %</div>
+                <div className="flex items-center gap-1">
+                  {WARD_SCALE.map((s) => (
+                    <span
+                      key={s.label}
+                      title={s.label}
+                      className="h-2.5 w-5"
+                      style={{ background: s.color }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-0.5 flex justify-between text-[10px] text-muted">
+                  <span>0%</span>
+                  <span>60%+</span>
+                </div>
+                <p className="mt-1 text-[10px] text-muted">Unshaded = no records</p>
+              </div>
+            )}
             <div className="mb-1 font-medium">{colorBy === "severity" ? "Severity" : "Category"}</div>
             <ul className="space-y-1">
               {colorBy === "severity"
