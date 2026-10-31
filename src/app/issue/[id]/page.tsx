@@ -97,7 +97,6 @@ export default async function IssuePage({
               <span className="font-normal text-muted">· spoken in {issue.transcriptLanguage}</span>
             ) : null}
           </h2>
-          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
           <audio controls src={`/api/media/${issue.audioPath}`} className="mt-3 w-full" />
           {issue.transcript && (
             <>

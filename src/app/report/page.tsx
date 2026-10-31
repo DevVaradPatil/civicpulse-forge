@@ -58,16 +58,20 @@ export default function ReportPage() {
   const [transcript, setTranscript] = useState<{ text: string; language: string | null } | null>(
     null,
   );
+  // Starts enabled: `navigator` does not exist during server rendering, and
+  // probing it in an effect would just cause a cascading render. An
+  // unsupported browser is discovered on the first attempt instead, which
+  // reports the real reason.
   const [micSupported, setMicSupported] = useState(true);
   const recorderRef = useRef<Awaited<ReturnType<typeof startRecording>> | null>(null);
 
-  // Checked after mount: it touches navigator, which the server does not have.
-  useEffect(() => {
-    setMicSupported(microphoneSupported());
-  }, []);
-
   async function beginRecording() {
     setError("");
+    if (!microphoneSupported()) {
+      setMicSupported(false);
+      setError("This browser cannot record audio. Use a photo report instead.");
+      return;
+    }
     setTriage(null);
     setTranscript(null);
     setCreatedId("");
