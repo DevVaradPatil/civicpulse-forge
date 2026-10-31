@@ -12,7 +12,8 @@ export async function GET(
   const objectPath = path.join("/");
 
   // Only allow our known prefixes.
-  if (!objectPath.startsWith("issues/") && !objectPath.startsWith("resolutions/")) {
+  const ALLOWED = ["issues/", "resolutions/", "audio/"];
+  if (!ALLOWED.some((p) => objectPath.startsWith(p))) {
     return new Response("Forbidden", { status: 403 });
   }
 

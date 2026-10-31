@@ -24,7 +24,8 @@ export async function downloadFile(
   const { data, error } = await supabaseAdmin.storage.from(BUCKET).download(objectPath);
   if (error || !data) return null;
   const buffer = Buffer.from(await data.arrayBuffer());
-  return { buffer, contentType: data.type || "image/jpeg" };
+  // Falling back to an image type would make an <audio> element refuse to play.
+  return { buffer, contentType: data.type || contentTypeFor(objectPath) };
 }
 
 /** Decodes a data URL or bare base64 string into a Buffer + mime type. */
@@ -44,11 +45,35 @@ export async function uploadAudio(buffer: Buffer, contentType: string): Promise<
       ? "m4a"
       : contentType.includes("ogg")
         ? "ogg"
-        : "bin";
+        : contentType.includes("wav")
+          ? "wav"
+          : contentType.includes("mpeg") || contentType.includes("mp3")
+            ? "mp3"
+            : contentType.includes("aac")
+              ? "aac"
+              : "bin";
   const objectPath = `audio/${Date.now()}-${randomUUID()}.${ext}`;
   const { error } = await supabaseAdmin.storage
     .from(BUCKET)
     .upload(objectPath, buffer, { contentType, upsert: true, cacheControl: "31536000" });
   if (error) throw new Error(`audio upload failed: ${error.message}`);
   return objectPath;
+}
+
+/** Content type guessed from the stored object's extension. */
+function contentTypeFor(objectPath: string): string {
+  const ext = objectPath.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+    webm: "audio/webm",
+    ogg: "audio/ogg",
+    m4a: "audio/mp4",
+    wav: "audio/wav",
+    mp3: "audio/mpeg",
+    aac: "audio/aac",
+  };
+  return map[ext] ?? "application/octet-stream";
 }
