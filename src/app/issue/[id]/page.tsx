@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { MapPin, Users, Building2, Database, ExternalLink } from "lucide-react";
+import { MapPin, Users, Building2, Database, ExternalLink, Mic } from "lucide-react";
 import { getIssue, countNearbyDuplicates } from "@/lib/server/issues";
 import { CATEGORIES, agencyLabel, UNATTRIBUTED_WARD } from "@/lib/domain";
 import { resolveAgency } from "@/lib/server/agencies";
@@ -44,7 +44,9 @@ export default async function IssuePage({
       ) : (
         <div className="flex aspect-video w-full items-center justify-center rounded-lg border border-border bg-surface">
           <p className="px-6 text-center text-sm text-muted">
-            Official grievance record — no citizen photo
+            {issue.audioPath
+              ? "Voice report — listen below"
+              : "Official grievance record — no citizen photo"}
           </p>
         </div>
       )}
@@ -84,6 +86,30 @@ export default async function IssuePage({
           value={agencyLabel(routed.agency)}
         />
       </div>
+
+      {/* A spoken report: the recording, and the citizen's own words. */}
+      {issue.audioPath && (
+        <div className="mt-6 rounded-lg border border-border p-4">
+          <h2 className="flex items-center gap-2 text-sm font-medium">
+            <Mic className="h-4 w-4 text-brand" />
+            Voice report
+            {issue.transcriptLanguage ? (
+              <span className="font-normal text-muted">· spoken in {issue.transcriptLanguage}</span>
+            ) : null}
+          </h2>
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio controls src={`/api/media/${issue.audioPath}`} className="mt-3 w-full" />
+          {issue.transcript && (
+            <>
+              <p className="mt-3 text-sm italic text-muted">&ldquo;{issue.transcript}&rdquo;</p>
+              <p className="mt-2 text-xs text-muted">
+                Transcribed by Sarvam AI. The title and description above are an English summary
+                written from these words.
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       {issue.hazards.length > 0 && (
         <div className="mt-6 rounded-lg border border-border p-4">

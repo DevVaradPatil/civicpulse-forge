@@ -35,3 +35,20 @@ export function decodeImage(input: string, fallbackMime = "image/jpeg") {
   }
   return { buffer: Buffer.from(input, "base64"), mimeType: fallbackMime };
 }
+
+/** Uploads a voice recording and returns its object path (served via /api/media). */
+export async function uploadAudio(buffer: Buffer, contentType: string): Promise<string> {
+  const ext = contentType.includes("webm")
+    ? "webm"
+    : contentType.includes("mp4") || contentType.includes("m4a")
+      ? "m4a"
+      : contentType.includes("ogg")
+        ? "ogg"
+        : "bin";
+  const objectPath = `audio/${Date.now()}-${randomUUID()}.${ext}`;
+  const { error } = await supabaseAdmin.storage
+    .from(BUCKET)
+    .upload(objectPath, buffer, { contentType, upsert: true, cacheControl: "31536000" });
+  if (error) throw new Error(`audio upload failed: ${error.message}`);
+  return objectPath;
+}

@@ -16,6 +16,8 @@ const MAX_LIMIT = 1000;
 const DEFAULT_LIMIT = 200;
 /** ~12 MB of binary, allowing for base64's ~33% overhead. */
 const MAX_IMAGE_CHARS = 17_000_000;
+/** ~8 MB of audio; a 30s Opus clip is a few hundred KB. */
+const MAX_AUDIO_CHARS = 11_000_000;
 
 export async function GET(req: Request) {
   const raw = Number(new URL(req.url).searchParams.get("limit"));
@@ -39,11 +41,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  if (!body.imageBase64 || typeof body.lat !== "number" || typeof body.lng !== "number" || !body.triage) {
+  // A report carries a photo, a voice recording, or both.
+  if (!body.imageBase64 && !body.audioBase64) {
     return NextResponse.json(
-      { error: "imageBase64, lat, lng and triage are required." },
+      { error: "A report needs either imageBase64 or audioBase64." },
       { status: 400 },
     );
+  }
+  if (typeof body.lat !== "number" || typeof body.lng !== "number" || !body.triage) {
+    return NextResponse.json({ error: "lat, lng and triage are required." }, { status: 400 });
   }
 
   // Never trust the client: a coordinate off the globe would land on the map
@@ -60,11 +66,15 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  if (body.imageBase64.length > MAX_IMAGE_CHARS) {
+  if ((body.imageBase64?.length ?? 0) > MAX_IMAGE_CHARS) {
     return NextResponse.json(
       { error: "That photo is too large. Please use one under 12 MB." },
       { status: 413 },
     );
+  }
+  // 30s of Opus is well under this; anything bigger is not a voice report.
+  if ((body.audioBase64?.length ?? 0) > MAX_AUDIO_CHARS) {
+    return NextResponse.json({ error: "That recording is too large." }, { status: 413 });
   }
 
   const authed = await getUserFromRequest(req);

@@ -121,3 +121,85 @@ export async function triageImage(
     confidence: Math.min(1, Math.max(0, Number(raw.confidence) || 0.5)),
   };
 }
+
+const SPOKEN_PROMPT = `You are CivicPulse's triage agent for civic issues reported by citizens in Bengaluru, India.
+Below is a transcript of a spoken report. The citizen may have spoken Kannada, Hindi, English or another Indian language.
+
+Rules:
+- Decide if it describes a genuine civic/public-infrastructure issue. Chit-chat, tests, or unrelated speech => isCivicIssue=false.
+- Pick the single best category.
+- Rate severity 1-5 from what is actually said (5 = immediate danger to people/vehicles). Judge only on the words; you cannot see the place.
+- Write the title and description in ENGLISH so the record is readable on a shared dashboard, even when the citizen spoke another language.
+- Use ONLY what the transcript says. Do not add a street, a landmark, a cause or a measurement that was not spoken.
+- If the transcript is empty or says nothing about a civic problem, set isCivicIssue=false and say so in the description.
+- List concrete hazards only if the citizen mentioned them.
+Return ONLY the structured JSON.`;
+
+/**
+ * Triage agent for spoken reports. Takes the transcript Sarvam produced and
+ * returns the same structure as a photo report, so everything downstream —
+ * routing, dedup, the dashboard — treats the two identically.
+ */
+export async function triageTranscript(
+  transcript: string,
+  languageName?: string | null,
+  categoryHint?: IssueCategory,
+): Promise<TriageResult> {
+  const spoken = transcript.trim();
+  if (!spoken) {
+    // Nothing was said; don't spend a model call to be told that.
+    return {
+      isCivicIssue: false,
+      category: "other",
+      severity: 1,
+      title: "No speech detected",
+      description:
+        "The recording contained no recognisable speech, so there is nothing to triage.",
+      hazards: [],
+      confidence: 0,
+    };
+  }
+
+  const hint =
+    categoryHint && categoryHint !== "other"
+      ? `\n\nThe reporter pre-selected the category "${categoryHint}". Prefer it unless the transcript clearly describes something else.`
+      : "";
+
+  const res = await generate({
+    model: MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `${SPOKEN_PROMPT}${hint}
+
+Spoken language: ${languageName ?? "unknown"}
+Transcript:
+"""
+${spoken.slice(0, 2000)}
+"""`,
+          },
+        ],
+      },
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: schema,
+      temperature: 0.2,
+    },
+  });
+
+  const raw = JSON.parse(res.text ?? "{}");
+  const category: IssueCategory = CATEGORIES.includes(raw.category) ? raw.category : "other";
+
+  return {
+    isCivicIssue: Boolean(raw.isCivicIssue),
+    category,
+    severity: clampSeverity(raw.severity),
+    title: String(raw.title ?? "Reported civic issue").slice(0, 80),
+    description: String(raw.description ?? "").slice(0, 400),
+    hazards: Array.isArray(raw.hazards) ? raw.hazards.map(String).slice(0, 5) : [],
+    confidence: Math.min(1, Math.max(0, Number(raw.confidence) || 0.5)),
+  };
+}

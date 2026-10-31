@@ -11,12 +11,22 @@ import {
   TriangleAlert,
   RefreshCw,
   Send,
+  Mic,
+  Square,
+  Languages,
 } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/button";
 import { SeverityBadge } from "@/components/ui/badge";
 import { CATEGORY_LIST, type IssueCategory, BENGALURU } from "@/lib/domain";
 import type { TriageResult } from "@/lib/types";
 import { fileToCompressedDataUrl, getPosition } from "@/lib/client/image";
+import {
+  startRecording,
+  microphoneSupported,
+  MicrophoneError,
+  MAX_RECORDING_SECONDS,
+  type Recording,
+} from "@/lib/client/audio";
 import { useAuth } from "@/components/auth-provider";
 
 type Phase = "idle" | "analyzing" | "review" | "submitting" | "done";
@@ -40,6 +50,86 @@ export default function ReportPage() {
   const [error, setError] = useState<string>("");
   const [createdId, setCreatedId] = useState<string>("");
   const [reporter, setReporter] = useState<string>("");
+
+  // ---- spoken reports
+  const [audio, setAudio] = useState<Recording | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [transcript, setTranscript] = useState<{ text: string; language: string | null } | null>(
+    null,
+  );
+  const [micSupported, setMicSupported] = useState(true);
+  const recorderRef = useRef<Awaited<ReturnType<typeof startRecording>> | null>(null);
+
+  // Checked after mount: it touches navigator, which the server does not have.
+  useEffect(() => {
+    setMicSupported(microphoneSupported());
+  }, []);
+
+  async function beginRecording() {
+    setError("");
+    setTriage(null);
+    setTranscript(null);
+    setCreatedId("");
+    setElapsed(0);
+    try {
+      recorderRef.current = await startRecording(setElapsed);
+      setRecording(true);
+      captureLocation();
+    } catch (e) {
+      setError(
+        e instanceof MicrophoneError ? e.message : "The microphone could not be started.",
+      );
+      if (e instanceof MicrophoneError && e.permanent) setMicSupported(false);
+    }
+  }
+
+  function cancelRecording() {
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
+    setRecording(false);
+    setElapsed(0);
+  }
+
+  async function stopRecording() {
+    const rec = recorderRef.current;
+    if (!rec) return;
+    recorderRef.current = null;
+    setRecording(false);
+
+    let clip: Recording;
+    try {
+      clip = await rec.stop();
+    } catch (e) {
+      setError(e instanceof MicrophoneError ? e.message : "The recording could not be saved.");
+      return;
+    }
+    setAudio(clip);
+    setPhase("analyzing");
+
+    try {
+      const res = await fetch("/api/triage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audioBase64: clip.dataUrl,
+          mimeType: clip.mimeType,
+          categoryHint: categoryHint || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not process that recording");
+
+      setTranscript({ text: String(data.transcript ?? ""), language: data.language ?? null });
+      const result = data as TriageResult;
+      setTriage(result);
+      setCategory(result.category);
+      setPhase("review");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not process that recording");
+      setPhase("idle");
+    }
+  }
 
   useEffect(() => {
     if (displayName) setReporter(displayName);
@@ -75,6 +165,8 @@ export default function ReportPage() {
     setError("");
     setTriage(null);
     setCreatedId("");
+    setAudio(null);
+    setTranscript(null);
 
     // Validate before doing any work: the picker's `accept` is a hint, not a
     // guarantee, and a huge file would stall the browser before any upload.
@@ -126,6 +218,10 @@ export default function ReportPage() {
 
   async function submit() {
     if (!triage) return;
+    if (!preview && !audio) {
+      setError("Add a photo or a voice recording before submitting.");
+      return;
+    }
     if (!coords) {
       setError("A location is needed before this report can be submitted.");
       return;
@@ -138,8 +234,12 @@ export default function ReportPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          imageBase64: preview,
+          imageBase64: preview || undefined,
           mimeType: "image/jpeg",
+          audioBase64: audio?.dataUrl,
+          audioMimeType: audio?.mimeType,
+          transcript: transcript?.text,
+          transcriptLanguage: transcript?.language ?? undefined,
           lat: coords.lat,
           lng: coords.lng,
           triage: { ...triage, category },
@@ -158,6 +258,9 @@ export default function ReportPage() {
   }
 
   function reset() {
+    cancelRecording();
+    setAudio(null);
+    setTranscript(null);
     setPhase("idle");
     setPreview("");
     setTriage(null);
@@ -221,7 +324,7 @@ export default function ReportPage() {
         </div>
       )}
 
-      {/* Photo / picker */}
+      {/* Photo / voice picker */}
       <div className="mt-4">
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -230,8 +333,34 @@ export default function ReportPage() {
             alt="Reported issue"
             className="aspect-video w-full rounded-lg border border-border object-cover"
           />
+        ) : audio ? (
+          <div className="rounded-lg border border-border bg-surface p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Mic className="h-4 w-4 text-brand" />
+              Voice report · {audio.seconds.toFixed(0)}s
+            </div>
+            <audio controls src={audio.dataUrl} className="mt-3 w-full" />
+          </div>
+        ) : recording ? (
+          <div className="rounded-lg border-2 border-brand bg-brand/5 p-6 text-center">
+            <div className="flex items-center justify-center gap-2 text-brand">
+              <span className="h-3 w-3 animate-pulse rounded-full bg-sev-high" />
+              <span className="font-medium">Listening… {elapsed.toFixed(0)}s</span>
+            </div>
+            <p className="mt-1 text-xs text-muted">
+              Speak in any language. Stops automatically at {MAX_RECORDING_SECONDS}s.
+            </p>
+            <div className="mt-4 flex justify-center gap-3">
+              <Button onClick={stopRecording}>
+                <Square className="h-4 w-4" /> Stop &amp; transcribe
+              </Button>
+              <Button variant="secondary" onClick={cancelRecording}>
+                Cancel
+              </Button>
+            </div>
+          </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <button
               onClick={() => cameraRef.current?.click()}
               className="flex aspect-square flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-surface text-muted hover:border-brand hover:text-brand sm:aspect-video"
@@ -245,6 +374,21 @@ export default function ReportPage() {
             >
               <Upload className="h-7 w-7" />
               <span className="text-sm font-medium">Upload image</span>
+            </button>
+            {/* Spoken reports: no typing, and no need to use English. */}
+            <button
+              onClick={beginRecording}
+              disabled={!micSupported}
+              title={
+                micSupported
+                  ? "Describe the problem out loud, in any Indian language"
+                  : "This browser cannot record audio"
+              }
+              className="col-span-2 flex aspect-video flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-surface text-muted hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-1 sm:aspect-video"
+            >
+              <Mic className="h-7 w-7" />
+              <span className="text-sm font-medium">Speak it</span>
+              <span className="text-[11px]">Kannada · Hindi · English</span>
             </button>
           </div>
         )}
@@ -272,6 +416,20 @@ export default function ReportPage() {
             <div className="flex items-center gap-2 rounded-lg border border-sev-med/30 bg-sev-med/10 px-3 py-2 text-sm text-sev-med">
               <TriangleAlert className="h-4 w-4" />
               This may not be a civic issue. You can still submit if it is.
+            </div>
+          )}
+
+          {/* What the citizen actually said, kept in their own words. */}
+          {transcript && transcript.text && (
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Languages className="h-4 w-4 text-brand" />
+                Heard{transcript.language ? ` in ${transcript.language}` : ""}
+              </div>
+              <p className="mt-2 text-sm italic text-muted">&ldquo;{transcript.text}&rdquo;</p>
+              <p className="mt-2 text-xs text-muted">
+                Transcribed by Sarvam AI. The summary below is written from these words only.
+              </p>
             </div>
           )}
 

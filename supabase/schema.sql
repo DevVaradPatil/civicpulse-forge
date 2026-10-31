@@ -22,6 +22,12 @@ create table if not exists issues (
   geohash       text,
   -- Only citizen reports have a photo; official open-data records do not.
   photo_path    text,
+  -- A spoken report instead of (or alongside) a photo. The problem statement
+  -- asks for visual OR audio reports, and speaking removes the need to type,
+  -- or to type in English.
+  audio_path      text,
+  transcript      text,
+  transcript_lang text,
   -- How lat/lng was obtained for a citizen report: 'device' (GPS) or
   -- 'approximate' (the reporter accepted a city-centre pin because their
   -- device would not give a fix). Null on ingested records, whose coordinates
@@ -61,6 +67,9 @@ alter table issues add column if not exists source_url       text;
 alter table issues add column if not exists source_payload   jsonb;
 alter table issues add column if not exists ingested_at       bigint;
 alter table issues add column if not exists location_source  text;
+alter table issues add column if not exists audio_path       text;
+alter table issues add column if not exists transcript       text;
+alter table issues add column if not exists transcript_lang  text;
 alter table issues alter column photo_path drop not null;
 alter table issues alter column severity   drop not null;
 alter table issues alter column severity   drop default;

@@ -2,7 +2,7 @@ import "server-only";
 import { geohashForLocation, distanceBetween } from "geofire-common";
 import { supabaseAdmin } from "@/lib/server/supabase";
 import type { Complaint, Issue, NewIssueInput } from "@/lib/types";
-import { uploadImage, decodeImage, downloadFile } from "@/lib/server/storage";
+import { uploadImage, uploadAudio, decodeImage, downloadFile } from "@/lib/server/storage";
 import { verifyResolution, type VerificationResult } from "@/lib/agents/verifier";
 import { draftComplaint } from "@/lib/agents/routing";
 import { resolveAgency } from "@/lib/server/agencies";
@@ -36,6 +36,9 @@ function rowToIssue(d: Row): Issue {
     lng: d.lng as number,
     geohash: (d.geohash as string) ?? "",
     photoPath: (d.photo_path as string) ?? null,
+    audioPath: (d.audio_path as string) ?? null,
+    transcript: (d.transcript as string) ?? null,
+    transcriptLanguage: (d.transcript_lang as string) ?? null,
     confirmations: (d.confirmations as number) ?? 0,
     confirmedBy: (d.confirmed_by as string[]) ?? [],
     reporterId: (d.reporter_id as string) ?? undefined,
@@ -56,8 +59,24 @@ function rowToIssue(d: Row): Issue {
 }
 
 export async function createIssue(input: NewIssueInput): Promise<Issue> {
-  const { buffer, mimeType } = decodeImage(input.imageBase64, input.mimeType);
-  const photoPath = await uploadImage(buffer, mimeType, "issues");
+  // A report carries a photo, a voice recording, or both.
+  let photoPath: string | null = null;
+  if (input.imageBase64) {
+    const { buffer, mimeType } = decodeImage(input.imageBase64, input.mimeType);
+    photoPath = await uploadImage(buffer, mimeType, "issues");
+  }
+
+  let audioPath: string | null = null;
+  if (input.audioBase64) {
+    const match = input.audioBase64.match(/^data:(.+?);base64,(.*)$/s);
+    const audioMime = match?.[1] ?? input.audioMimeType ?? "audio/webm";
+    const audioData = match?.[2] ?? input.audioBase64;
+    audioPath = await uploadAudio(Buffer.from(audioData, "base64"), audioMime);
+  }
+
+  if (!photoPath && !audioPath) {
+    throw new Error("A report needs a photo or a voice recording.");
+  }
 
   const now = Date.now();
   const { data, error } = await supabaseAdmin
@@ -73,6 +92,10 @@ export async function createIssue(input: NewIssueInput): Promise<Issue> {
       lng: input.lng,
       geohash: geohashForLocation([input.lat, input.lng]),
       photo_path: photoPath,
+      audio_path: audioPath,
+      // The citizen's own words, kept verbatim in the language they spoke.
+      transcript: input.transcript ?? null,
+      transcript_lang: input.transcriptLanguage ?? null,
       confirmations: 0,
       confirmed_by: [],
       reporter_id: input.reporterId ?? null,

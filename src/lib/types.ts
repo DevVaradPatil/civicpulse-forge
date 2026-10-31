@@ -84,6 +84,11 @@ export interface Issue {
   geohash: string;
   /** Storage object path, served via /api/media/<photoPath>. Null with no photo. */
   photoPath: string | null;
+  /** Voice recording, served the same way. Null unless the report was spoken. */
+  audioPath?: string | null;
+  /** What the citizen said, verbatim, in the language they spoke. */
+  transcript?: string | null;
+  transcriptLanguage?: string | null;
   confirmations: number;
   confirmedBy?: string[];
   reporterId?: string;
@@ -213,7 +218,12 @@ export interface LeaderUser {
 }
 
 export type NewIssueInput = {
-  imageBase64: string;
+  /** A report carries a photo, a voice recording, or both. */
+  imageBase64?: string;
+  audioBase64?: string;
+  audioMimeType?: string;
+  transcript?: string;
+  transcriptLanguage?: string;
   mimeType: string;
   lat: number;
   lng: number;
