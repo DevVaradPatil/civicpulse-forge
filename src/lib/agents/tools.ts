@@ -171,9 +171,10 @@ async function searchSimilarGrievances(args: ToolResult): Promise<ToolResult> {
     .lte("lat", lat + dLat)
     .gte("lng", lng - dLng)
     .lte("lng", lng + dLng)
-    // Public photo records were never filed with an agency, so they are not
-    // grievance history and must not move these resolved/open counts.
+    // Public photo records were never filed with an agency, and demo seed rows
+    // are invented: neither is grievance history, so neither moves these counts.
     .or(`source.is.null,source.neq.${PHOTO_SOURCE}`)
+    .eq("seed", false)
     .limit(1000);
   if (category) q = q.eq("category", category);
 

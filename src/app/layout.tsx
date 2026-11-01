@@ -86,6 +86,13 @@ export default function RootLayout({
         <AuthProvider>
           <SiteHeader />
           <main className="flex-1">{children}</main>
+          {/* Disclosure: the leaderboard accounts and their reports are demo seed data. */}
+          <footer className="border-t border-border px-4 py-4 text-center text-xs text-muted">
+            Demo notice: the leaderboard and its users&rsquo; citizen reports are seed data created to
+            show how the platform works. Their photos are real public photos from Wikimedia Commons,
+            credited on each report. All grievance records, statistics and work orders come from
+            official open data.
+          </footer>
         </AuthProvider>
         <Toaster
           position="bottom-center"

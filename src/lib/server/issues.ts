@@ -23,9 +23,12 @@ function wardIdFrom(payload: unknown): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-/** Public photo records carry their photographer and licence in the source payload. */
+/**
+ * Public photo records carry their photographer and licence in the source
+ * payload; so do demo seed reports that reuse one of those photos.
+ */
 function photoCreditFrom(d: Row): Issue["photoCredit"] {
-  if (d.source !== PHOTO_SOURCE) return null;
+  if (d.source !== PHOTO_SOURCE && d.seed !== true) return null;
   const p = (d.source_payload ?? {}) as Record<string, unknown>;
   if (!p.artist || !p.license) return null;
   return {
