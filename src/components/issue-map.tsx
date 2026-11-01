@@ -177,22 +177,15 @@ export default function IssueMap({
       className="h-full w-full"
     >
       <LayersControl position="topright">
-        <LayersControl.BaseLayer checked name="Light">
-          <TileLayer
-            attribution='&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; OpenStreetMap'
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-          />
-        </LayersControl.BaseLayer>
-        <LayersControl.BaseLayer name="Streets">
+        {/* CARTO's basemap CDN now answers keyless requests with a 2KB
+            "APIKEY REQUIRED" watermark tile instead of an error, so its light
+            and dark layers silently rendered an unreadable map in production.
+            OSM and Esri need no key, which the "free services only" rule wants
+            anyway. */}
+        <LayersControl.BaseLayer checked name="Streets">
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-        </LayersControl.BaseLayer>
-        <LayersControl.BaseLayer name="Dark">
-          <TileLayer
-            attribution='&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; OpenStreetMap'
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           />
         </LayersControl.BaseLayer>
         <LayersControl.BaseLayer name="Satellite">
