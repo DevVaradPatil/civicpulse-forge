@@ -87,7 +87,7 @@ export default function RootLayout({
           <SiteHeader />
           <main className="flex-1">{children}</main>
           {/* Disclosure: the leaderboard accounts and their reports are demo seed data. */}
-          <footer className="border-t border-border px-4 py-4 text-center text-xs text-muted">
+          <footer className="sticky bottom-0 z-[1100] border-t border-border bg-bg px-4 py-2 text-center text-xs text-muted">
             Demo notice: the leaderboard and its users&rsquo; citizen reports are seed data created to
             show how the platform works. Their photos are real public photos from Wikimedia Commons,
             credited on each report. All grievance records, statistics and work orders come from
