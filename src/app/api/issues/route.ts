@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createIssue, listIssues, countIssues } from "@/lib/server/issues";
+import { createIssue, listIssues, listPhotoIssues, countIssues } from "@/lib/server/issues";
 import { awardPoints } from "@/lib/server/users";
 import { getUserFromRequest } from "@/lib/server/auth";
 import type { NewIssueInput } from "@/lib/types";
@@ -20,13 +20,23 @@ const MAX_IMAGE_CHARS = 17_000_000;
 const MAX_AUDIO_CHARS = 11_000_000;
 
 export async function GET(req: Request) {
-  const raw = Number(new URL(req.url).searchParams.get("limit"));
+  const params = new URL(req.url).searchParams;
+  const raw = Number(params.get("limit"));
   const limit = Number.isFinite(raw) && raw > 0 ? Math.min(Math.trunc(raw), MAX_LIMIT) : DEFAULT_LIMIT;
+  // `withPhotos=1` adds every photo record that falls outside the newest-N window.
+  const withPhotos = params.get("withPhotos") === "1";
   try {
     // `total` is the real row count, so a caller can say "N of TOTAL" instead of
     // presenting the page size as if it were the whole dataset.
-    const [issues, total] = await Promise.all([listIssues(limit), countIssues()]);
-    return NextResponse.json({ issues, total, limit });
+    const [newest, total, photos] = await Promise.all([
+      listIssues(limit),
+      countIssues(),
+      withPhotos ? listPhotoIssues() : Promise.resolve([]),
+    ]);
+    const seen = new Set(newest.map((i) => i.id));
+    const extraPhotos = photos.filter((i) => !seen.has(i.id));
+    const issues = [...newest, ...extraPhotos];
+    return NextResponse.json({ issues, total, limit, extraPhotos: extraPhotos.length });
   } catch (err) {
     console.error("list issues failed", err);
     return NextResponse.json({ error: "Could not load issues." }, { status: 500 });

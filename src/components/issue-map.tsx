@@ -55,7 +55,9 @@ function ClusteredMarkers({ issues, colorBy }: { issues: Issue[]; colorBy: Color
           ${
             i.locationSource === "approximate"
               ? '<p style="font-size:11px;color:#a16207;margin:2px 0">Approximate location — not a device fix</p>'
-              : ""
+              : i.locationSource === "locality"
+                ? '<p style="font-size:11px;color:#a16207;margin:2px 0">Locality from the photo caption — not the exact spot</p>'
+                : ""
           }
           <a href="/issue/${i.id}" style="font-size:13px;color:#2563eb;text-decoration:underline">View issue</a>
         </div>`,

@@ -51,6 +51,8 @@ const MAP_LIMIT = 1000;
 export default function MapPage() {
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [total, setTotal] = useState(0);
+  /** Older photo records added beyond the newest-N window. */
+  const [extraPhotos, setExtraPhotos] = useState(0);
   const [colorBy, setColorBy] = useState<ColorBy>("severity");
   const [showWards, setShowWards] = useState(false);
   const [wardStats, setWardStats] = useState<Map<number, WardChoropleth>>(new Map());
@@ -68,11 +70,12 @@ export default function MapPage() {
       })
       .catch(() => setWardStats(new Map()));
 
-    fetch(`/api/issues?limit=${MAP_LIMIT}`)
+    fetch(`/api/issues?limit=${MAP_LIMIT}&withPhotos=1`)
       .then((r) => r.json())
       .then((d) => {
         setIssues(d.issues ?? []);
         setTotal(Number(d.total) || (d.issues?.length ?? 0));
+        setExtraPhotos(Number(d.extraPhotos) || 0);
       })
       .catch(() => setIssues([]));
   }, []);
@@ -115,7 +118,8 @@ export default function MapPage() {
               ? "Loading…"
               : `${filtered.length.toLocaleString("en-IN")} shown` +
                 (issues.length < total
-                  ? ` · newest ${issues.length.toLocaleString("en-IN")} of ${total.toLocaleString("en-IN")} records in Bengaluru`
+                  ? ` · newest ${(issues.length - extraPhotos).toLocaleString("en-IN")} of ${total.toLocaleString("en-IN")} records in Bengaluru` +
+                    (extraPhotos > 0 ? `, plus ${extraPhotos} older photo record${extraPhotos === 1 ? "" : "s"}` : "")
                   : ` of ${total.toLocaleString("en-IN")} records in Bengaluru`)}
           </p>
         </div>

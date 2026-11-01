@@ -69,6 +69,15 @@ export interface Investigation {
   generatedAt: number;
 }
 
+/** Who took a public photo record's photo, and the licence it is republished under. */
+export interface PhotoCredit {
+  author: string;
+  license: string;
+  licenseUrl: string | null;
+  /** The photo's own page at the source. */
+  pageUrl: string | null;
+}
+
 /** An issue as stored in Supabase / returned to the client. */
 export interface Issue {
   id: string;
@@ -101,8 +110,13 @@ export interface Issue {
   wardId?: number | null;
   /** Real responsible agency code (e.g. "BBMP"). */
   agency?: string | null;
-  /** How the coordinates were obtained: GPS, or a city-centre pin the reporter accepted. */
-  locationSource?: "device" | "approximate" | null;
+  /**
+   * How the coordinates were obtained: GPS, a city-centre pin the reporter
+   * accepted, a public photo's camera geotag, or the locality its caption names.
+   */
+  locationSource?: "device" | "approximate" | "photo_geotag" | "locality" | null;
+  /** Photographer + licence for a public photo record; the licence requires showing it. */
+  photoCredit?: PhotoCredit | null;
   /** Provenance — set on every ingested record, absent on citizen reports. */
   source?: string | null;
   sourceRecordId?: string | null;

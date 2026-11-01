@@ -392,6 +392,14 @@ export function severityMeta(
  */
 export const UNATTRIBUTED_WARD = "Other";
 
+/**
+ * Source tag for public photo records: real, geotagged photos of Bengaluru civic
+ * problems from Wikimedia Commons (scripts/ingest-commons.mjs). They were never
+ * filed with an agency, so they are kept out of the agency and ward
+ * accountability figures, which count grievances only.
+ */
+export const PHOTO_SOURCE = "wikimedia_commons";
+
 export function isRealWard(ward: string | null | undefined): boolean {
   return Boolean(ward) && ward !== UNATTRIBUTED_WARD;
 }

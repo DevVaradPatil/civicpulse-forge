@@ -1,5 +1,5 @@
-import { Landmark, Camera } from "lucide-react";
-import { severityMeta, STATUSES, type IssueStatus } from "@/lib/domain";
+import { Landmark, Camera, Image as ImageIcon } from "lucide-react";
+import { severityMeta, STATUSES, PHOTO_SOURCE, type IssueStatus } from "@/lib/domain";
 
 // Literal class strings so Tailwind v4 detects them at build time.
 const SEV_CLASS: Record<string, string> = {
@@ -55,6 +55,17 @@ export function RecordSourceBadge({
   source?: string | null;
   className?: string;
 }) {
+  if (source === PHOTO_SOURCE) {
+    return (
+      <span
+        className={`${outline} ${className} bg-surface text-muted`}
+        title="A real, geotagged public photo of this problem from Wikimedia Commons, credited to its photographer"
+      >
+        <ImageIcon className="h-3 w-3" />
+        Public photo
+      </span>
+    );
+  }
   const official = Boolean(source);
   return (
     <span

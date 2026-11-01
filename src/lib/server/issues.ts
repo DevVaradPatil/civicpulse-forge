@@ -6,7 +6,7 @@ import { uploadImage, uploadAudio, decodeImage, downloadFile } from "@/lib/serve
 import { verifyResolution, type VerificationResult } from "@/lib/agents/verifier";
 import { draftComplaint } from "@/lib/agents/routing";
 import { resolveAgency } from "@/lib/server/agencies";
-import { CONFIRMATIONS_TO_VERIFY, type IssueCategory } from "@/lib/domain";
+import { CONFIRMATIONS_TO_VERIFY, PHOTO_SOURCE, type IssueCategory } from "@/lib/domain";
 
 /** Dedup agent (deterministic): count same-category issues within ~250m. */
 const DUP_RADIUS_KM = 0.25;
@@ -22,6 +22,20 @@ function wardIdFrom(payload: unknown): number | null {
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : null;
 }
+
+/** Public photo records carry their photographer and licence in the source payload. */
+function photoCreditFrom(d: Row): Issue["photoCredit"] {
+  if (d.source !== PHOTO_SOURCE) return null;
+  const p = (d.source_payload ?? {}) as Record<string, unknown>;
+  if (!p.artist || !p.license) return null;
+  return {
+    author: String(p.artist),
+    license: String(p.license),
+    licenseUrl: (p.licenseUrl as string) ?? null,
+    pageUrl: (d.source_url as string) ?? null,
+  };
+}
+
 function rowToIssue(d: Row): Issue {
   return {
     id: String(d.id),
@@ -49,6 +63,7 @@ function rowToIssue(d: Row): Issue {
     wardId: wardIdFrom(d.source_payload),
     agency: (d.agency as string) ?? null,
     locationSource: (d.location_source as Issue["locationSource"]) ?? null,
+    photoCredit: photoCreditFrom(d),
     source: (d.source as string) ?? null,
     sourceRecordId: (d.source_record_id as string) ?? null,
     sourceUrl: (d.source_url as string) ?? null,
@@ -126,6 +141,22 @@ export async function listIssues(limit = 200): Promise<Issue[]> {
   const { data, error } = await supabaseAdmin
     .from(TABLE)
     .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(rowToIssue);
+}
+
+/**
+ * Every record that has a photo (citizen reports and public photo records).
+ * They are a few dozen among tens of thousands, so a newest-N window would
+ * leave most of them off the map.
+ */
+export async function listPhotoIssues(limit = 500): Promise<Issue[]> {
+  const { data, error } = await supabaseAdmin
+    .from(TABLE)
+    .select("*")
+    .not("photo_path", "is", null)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw new Error(error.message);
