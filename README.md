@@ -7,6 +7,25 @@
 Built for the **Forge Gen AI Buildathon**, Theme 1 — *Civic Pulse, Digital Governance & Public
 Information*. Demo scope: **Bengaluru**.
 
+**Live app: <https://civicpulse-forge.vercel.app>**
+
+---
+
+## How a report flows
+
+1. **Report** — a photo, or speech in any of 22 Indian languages (Sarvam AI keeps the
+   citizen's exact words). Location comes from the device; if it can't, the reporter is told.
+2. **Triage agent** (Gemini, multimodal) — category, severity 1–5, hazards, confidence.
+3. **Dedup agent** (deterministic) — clusters same-category reports within 250 m.
+4. **Routing agent** — routes to the agency that actually handles that category, *counted*
+   from the real records, and drafts the formal complaint.
+5. **Investigation agent** — multi-step function calling over five tools and the live
+   records, with its tool-call trace shown on the issue page (below).
+6. **Community + Resolution Verifier agent** — neighbours confirm (3 confirmations verify a
+   report); the verifier compares before/after photos to confirm a fix.
+7. **Accountability dashboard + ward map** — agency and ward resolution rates over every
+   record, computed in SQL.
+
 ---
 
 ## What makes this more than a complaint form
@@ -52,10 +71,11 @@ flowchart TB
         TRIAGE["Triage agent<br/>category · severity · hazards"]
         INVEST["Investigation agent<br/>multi-step function calling"]
         TOOLS["5 tools over live records"]
+        ROUTEV["Routing + Verifier agents<br/>complaint draft · before/after check"]
     end
 
     subgraph Data["Supabase Postgres"]
-        ISSUES[("issues<br/>16,071 grievances")]
+        ISSUES[("issues<br/>16,071 grievances<br/>+ 16 public photo records")]
         ORDERS[("work_orders<br/>43,492 · ₹10,571 cr")]
         RPC["SQL aggregation RPCs<br/>+ GIN full-text index"]
     end
@@ -64,6 +84,7 @@ flowchart TB
         ICMYC["I Change My City<br/>complaints 2019-2022"]
         BBMPWO["BBMP work orders<br/>2013-2022"]
         WARDS["BBMP ward boundaries<br/>198 polygons"]
+        COMMONS["Wikimedia Commons<br/>geotagged civic-issue photos"]
     end
 
     PHOTO --> API
@@ -71,12 +92,14 @@ flowchart TB
     API --> SARVAM --> TRIAGE
     API --> TRIAGE
     API --> INVEST
+    API --> ROUTEV
     INVEST <--> TOOLS
     TOOLS --> RPC
     RPC --> ISSUES
     RPC --> ORDERS
     ICMYC -.ingest.-> ISSUES
     BBMPWO -.ingest.-> ORDERS
+    COMMONS -.ingest.-> ISSUES
     WARDS -.->|ward_id join| UI
     API --> UI
 ```
@@ -159,6 +182,13 @@ Honouring it properly meant refusing some convenient shortcuts:
   dataset has no complaint id, I Change My City has no public API, and Swachhata publishes none.
   Attaching stock or scraped images would be fabrication. Before/after verification runs on
   citizen reports, which do have photos.
+- **Photos come in as their own records instead.** 16 real, geotagged, freely licensed
+  photos of Bengaluru civic problems from Wikimedia Commons (flooding in Tatanagar, sewage
+  foam in the Bellandur storm drain, burning rubbish at Rampura Lake, …) are stored as
+  standalone *public photo records*, each credited to its photographer with its licence,
+  never attached to a grievance. Only the file list and each category were chosen by hand;
+  location, date, photographer, licence and description come from the Commons API. They
+  were never filed with an agency, so the agency and ward figures leave them out.
 
 Every row carries `source`, `source_record_id`, `source_url`, `source_payload` and `ingested_at`.
 Every imported issue page links to **"Verify this record at the source"**, which returns that
@@ -173,8 +203,9 @@ exact record from the government API.
 | [I Change My City Complaints Log 2019–2022](https://data.opencity.in/dataset/i-change-my-city-data) | 16,071 | CC-BY-SA · Janaagraha via OpenCity |
 | [BBMP Work Orders by Ward 2013–2022](https://data.opencity.in/dataset/bbmp-work-orders-by-ward-2013-2022) | 43,492 | Public Domain |
 | [BBMP Ward Information](https://data.opencity.in/dataset/bbmp-ward-information) | 198 polygons | OpenCity |
+| [Wikimedia Commons](https://commons.wikimedia.org/) (curated in `scripts/ingest-commons.mjs`) | 16 photos | CC BY / CC BY-SA / CC0, credited per photo |
 
-All three join on the **numeric BBMP ward id**, never on ward names — the datasets transliterate
+The three OpenCity datasets join on the **numeric BBMP ward id**, never on ward names — the datasets transliterate
 the same places differently (Hoodi/Hudi, Ulsoor/Halsoor, Arekere/Arakere), and a name join
 silently drops 22 of 198 wards.
 
@@ -193,22 +224,27 @@ which the hackathon's "free services only" rule forbids.
 
 ## Run it
 
+Needs **Node.js 24** (the scripts import the app's TypeScript directly, which relies on
+Node's built-in type stripping).
+
 ```bash
 npm install
-cp .env.example .env.local    # fill in the keys
-npm run dev
+cp .env.example .env.local    # Gemini, Supabase and (for voice reports) Sarvam keys
+npm run dev                   # http://localhost:3000
 ```
 
 Then populate an empty database:
 
 ```bash
-# 1. Run supabase/schema.sql in the Supabase SQL editor (idempotent)
+# 1. Run supabase/schema.sql in the Supabase SQL editor (idempotent; re-run it after pulling)
 node --env-file=.env.local scripts/ingest-opencity.mjs      # 16,071 grievances
 node --env-file=.env.local scripts/ingest-workorders.mjs    # 43,492 work orders
+node --env-file=.env.local scripts/ingest-commons.mjs       # 16 public photo records
 ```
 
-Both ingests are idempotent, paginated, retrying, and verify themselves against the database
-afterwards. `--dry-run` shows what they would do; `--limit N` runs a smoke test.
+All three ingests are idempotent, retrying, and verify themselves against the database
+afterwards. `--dry-run` shows what they would do without writing; the two OpenCity ingests
+also take `--limit N` for a smoke test.
 
 **[HANDOFF.md](HANDOFF.md)** has the full setup guide, every environment variable, and the ten
 data traps found the hard way — including the two month-first date formats that silently corrupt
@@ -231,4 +267,4 @@ recovers from a tool error and never cites a tool call that failed or never ran.
 The Next.js/Supabase/UI shell is reused boilerplate from a prior civic project by the same
 author. Built during the Forge window: the open-data ingestion and its grounding layer, the
 multi-step agent loop and its tools, the work-order money trail with full-text retrieval, the
-ward choropleth, voice reports, and the accountability dashboard.
+ward choropleth, voice reports, public photo records, and the accountability dashboard.
