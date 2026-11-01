@@ -202,6 +202,7 @@ as $$
          count(*) filter (where i.status in ('reported','reopened','in_progress','verified')) as open
   from issues i
   where i.ward is not null
+    and i.source is distinct from 'wikimedia_commons'
   group by i.ward
   order by count(*) desc;
 $$;
@@ -210,6 +211,10 @@ $$;
 -- These run in Postgres over EVERY row. The dashboard must never aggregate a
 -- page of rows fetched into the app: with 16k+ records that would silently
 -- report numbers computed from a 200-row window.
+--
+-- Public photo records (source 'wikimedia_commons', scripts/ingest-commons.mjs)
+-- are excluded here: they document real problems but were never filed with an
+-- agency, so counting them as open grievances would misstate every rate below.
 
 -- Headline counts. `undecided` (rejected + closed) is reported separately so a
 -- resolution rate can exclude it instead of quietly counting it either way.
@@ -229,11 +234,13 @@ as $$
     'citizenReports',  count(*) filter (where source is null),
     'byStatus', coalesce((
       select json_object_agg(s.status, s.n)
-      from (select status, count(*) n from issues group by status) s
+      from (select status, count(*) n from issues
+            where source is distinct from 'wikimedia_commons' group by status) s
     ), '{}'::json),
     'byCategory', coalesce((
       select json_object_agg(c.category, c.n)
-      from (select category, count(*) n from issues group by category) c
+      from (select category, count(*) n from issues
+            where source is distinct from 'wikimedia_commons' group by category) c
     ), '{}'::json),
     -- Buckets match severityMeta() in src/lib/domain.ts.
     'bySeverity', json_build_object(
@@ -245,7 +252,8 @@ as $$
     'windowStart', min(created_at),
     'windowEnd',   max(created_at)
   )
-  from issues;
+  from issues
+  where source is distinct from 'wikimedia_commons';
 $$;
 
 -- Per-agency accountability. A NULL agency row means the source never assigned
@@ -261,6 +269,7 @@ as $$
          count(*) filter (where i.status in ('reported','verified','in_progress','reopened')) as open,
          count(*) filter (where i.status in ('rejected','closed')) as undecided
   from issues i
+  where i.source is distinct from 'wikimedia_commons'
   group by i.agency
   order by count(*) desc;
 $$;
@@ -280,6 +289,7 @@ as $$
              to_timestamp(max(created_at) / 1000.0) at time zone 'Asia/Kolkata'
            ) as last_month
     from issues
+    where source is distinct from 'wikimedia_commons'
   ),
   months as (
     select generate_series(
@@ -293,6 +303,7 @@ as $$
   from months mo
   left join issues i
     on date_trunc('month', to_timestamp(i.created_at / 1000.0) at time zone 'Asia/Kolkata') = mo.m
+   and i.source is distinct from 'wikimedia_commons'
   group by mo.m
   order by mo.m;
 $$;
@@ -322,6 +333,7 @@ as $$
          mode() within group (order by i.category) as top_category
   from issues i
   where i.geohash is not null and length(i.geohash) >= p_precision
+    and i.source is distinct from 'wikimedia_commons'
   group by substr(i.geohash, 1, p_precision)
   having count(*) >= p_min
   order by count(*) desc

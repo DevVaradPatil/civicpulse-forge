@@ -97,6 +97,9 @@ node --env-file=.env.local scripts/ingest-opencity.mjs
 
 # 3. Work orders: 43,492 rows, ~4 min
 node --env-file=.env.local scripts/ingest-workorders.mjs
+
+# 4. Public photo records: 16 curated Commons photos, ~30 s
+node --env-file=.env.local scripts/ingest-commons.mjs
 ```
 
 Both ingests are **idempotent** (upsert on `source` + `source_record_id`) — re-running
@@ -117,6 +120,20 @@ the official KML; you do not need to regenerate it.
 | [I Change My City Complaints Log 2019–2022](https://data.opencity.in/dataset/i-change-my-city-data) | 16,071 | CC-BY-SA, Janaagraha via OpenCity | Grievances, wards, agencies, statuses |
 | [BBMP Work Orders by Ward 2013–2022](https://data.opencity.in/dataset/bbmp-work-orders-by-ward-2013-2022) | 43,492 | Public Domain | Spend per ward, the money trail |
 | [BBMP Ward Information](https://data.opencity.in/dataset/bbmp-ward-information) | 198 polygons | unstated | Ward boundaries for the choropleth |
+| [Wikimedia Commons](https://commons.wikimedia.org/) (curated in `scripts/ingest-commons.mjs`) | 16 photos | CC BY / CC BY-SA / CC0, per photo | Public photo records: real geotagged photos of Bengaluru civic problems |
+
+### Public photo records (`source = 'wikimedia_commons'`)
+
+Real photos of real Bengaluru problems (flooding in Tatanagar, sewage foam in the
+Bellandur storm drain, burning rubbish at Rampura Lake, potholes in Munnekollal, …),
+each credited to its photographer with its licence. They are **standalone records, never
+attached to an OpenCity grievance**. What a person chose is the list of files and each
+one's category; the location, date, photographer, licence and description come from the
+Commons API and are stored untouched in `source_payload`. Severity stays NULL, there is no
+reporter and no agency, and they are **excluded from the agency/ward/dashboard figures**
+(they were never filed with an agency). They do appear on the map and feed the dedup agent.
+Two files have no geotag; they are placed at the locality their caption names and
+labelled as such (`location_source = 'locality'`).
 
 Everything joins on the **numeric BBMP ward id (1–198)**, never on ward names — see
 §7.

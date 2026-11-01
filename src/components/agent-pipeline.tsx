@@ -14,7 +14,7 @@ import {
   Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CATEGORIES, agencyLabel } from "@/lib/domain";
+import { CATEGORIES, PHOTO_SOURCE, agencyLabel } from "@/lib/domain";
 import type { Complaint, Issue } from "@/lib/types";
 
 type StepStatus = "done" | "pending" | "active";
@@ -110,7 +110,12 @@ export function AgentPipeline({
         {issue.severity != null ? `, severity ${issue.severity}/5` : ""}
         {typeof issue.aiConfidence === "number" &&
           ` · ${Math.round(issue.aiConfidence * 100)}% confidence`}
-        {issue.source ? " · imported from an official record (not AI-triaged)" : ""}.
+        {issue.source === PHOTO_SOURCE
+          ? " · imported public photo, category set by hand (not AI-triaged)"
+          : issue.source
+            ? " · imported from an official record (not AI-triaged)"
+            : ""}
+        .
       </Step>
 
       {/* 2. Dedup */}

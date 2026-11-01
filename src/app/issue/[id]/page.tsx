@@ -51,6 +51,29 @@ export default async function IssuePage({
         </div>
       )}
 
+      {/* A public photo's licence requires crediting the photographer. */}
+      {issue.photoCredit && (
+        <p className="mt-2 text-xs text-muted">
+          Photo:{" "}
+          {issue.photoCredit.pageUrl ? (
+            <a href={issue.photoCredit.pageUrl} target="_blank" rel="noreferrer" className="underline">
+              {issue.photoCredit.author}
+            </a>
+          ) : (
+            issue.photoCredit.author
+          )}{" "}
+          ·{" "}
+          {issue.photoCredit.licenseUrl ? (
+            <a href={issue.photoCredit.licenseUrl} target="_blank" rel="noreferrer" className="underline">
+              {issue.photoCredit.license}
+            </a>
+          ) : (
+            issue.photoCredit.license
+          )}{" "}
+          · via Wikimedia Commons
+        </p>
+      )}
+
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-0.5 text-xs font-medium">
           <CategoryIcon category={issue.category} className="h-3.5 w-3.5" />
@@ -73,11 +96,21 @@ export default async function IssuePage({
         <Stat icon={<Users className="h-4 w-4" />} label="Confirmations" value={String(issue.confirmations)} />
         <Stat
           icon={<MapPin className="h-4 w-4" />}
-          label={issue.locationSource === "approximate" ? "Location (approximate)" : "Location"}
+          label={
+            issue.locationSource === "approximate"
+              ? "Location (approximate)"
+              : issue.locationSource === "locality"
+                ? "Location (locality)"
+                : issue.locationSource === "photo_geotag"
+                  ? "Location (photo geotag)"
+                  : "Location"
+          }
           value={
             issue.locationSource === "approximate"
               ? "City centre — device location unavailable"
-              : `${issue.lat.toFixed(4)}, ${issue.lng.toFixed(4)}`
+              : issue.locationSource === "locality"
+                ? "Neighbourhood named in the photo caption, not the exact spot"
+                : `${issue.lat.toFixed(4)}, ${issue.lng.toFixed(4)}`
           }
         />
         <Stat
