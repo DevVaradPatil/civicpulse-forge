@@ -409,7 +409,7 @@ export default function ReportPage() {
       {phase === "analyzing" && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-muted">
           <Loader2 className="h-4 w-4 animate-spin text-brand" />
-          Triage agent is analyzing the photo…
+          {audio ? "Transcribing and analyzing your report…" : "Triage agent is analyzing the photo…"}
         </div>
       )}
 

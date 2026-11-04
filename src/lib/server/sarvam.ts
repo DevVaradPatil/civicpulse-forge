@@ -11,7 +11,8 @@ import "server-only";
  * Contract (docs.sarvam.ai, verified against the live API):
  *   POST https://api.sarvam.ai/speech-to-text
  *   header  api-subscription-key: <key>      (no Bearer prefix)
- *   body    multipart/form-data, audio in a field literally named "file"
+ *   body    multipart/form-data, audio in a field literally named "file".
+ *           The client sends 16 kHz mono WAV (see lib/client/audio.ts).
  *   returns { request_id, transcript, language_code, language_probability? }
  */
 
@@ -47,8 +48,11 @@ export class SarvamError extends Error {
 function describe(status: number, body: string): SarvamError {
   // Sarvam returns { error: { message, code, request_id } }.
   let code = "";
+  let detail = "";
   try {
-    code = String(JSON.parse(body)?.error?.code ?? "");
+    const error = JSON.parse(body)?.error;
+    code = String(error?.code ?? "");
+    detail = String(error?.message ?? "").trim();
   } catch {
     /* body was not JSON */
   }
@@ -73,8 +77,9 @@ function describe(status: number, body: string): SarvamError {
       if (status >= 500) {
         return new SarvamError("The speech service is unavailable. Try again.", status, true);
       }
+      // Sarvam's message says what was wrong with the request; the bare code does not.
       return new SarvamError(
-        `Transcription failed${code ? ` (${code})` : ""}.`,
+        `Transcription failed${detail ? `: ${detail}` : code ? ` (${code})` : "."}`,
         status,
         false,
       );
@@ -94,8 +99,11 @@ export async function transcribeAudio(
   const key = process.env.SARVAM_API_KEY;
   if (!key) throw new SarvamError("Speech transcription is not configured.", 500, false);
 
+  // Browsers report "audio/webm;codecs=opus"; the file part must carry the bare type.
+  const fileType = mimeType.split(";")[0].trim() || "audio/wav";
+
   const form = new FormData();
-  form.append("file", new Blob([new Uint8Array(audio)], { type: mimeType }), fileNameFor(mimeType));
+  form.append("file", new Blob([new Uint8Array(audio)], { type: fileType }), fileNameFor(fileType));
   form.append("model", MODEL);
   form.append("mode", "transcribe");
   // "unknown" is Sarvam's literal auto-detect value.
