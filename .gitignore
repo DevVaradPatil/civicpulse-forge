@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local demo/recording artifacts — the demo video lives on a GitHub Release,
+# not in git history, so clones stay small
+/Downloads/
+*.mp4
+*.mp3
